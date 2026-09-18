@@ -1,10 +1,11 @@
+use crate::models::date_utils;
 use crate::models::deposit::{
     DepositAccount, FiType, Holder, Holders, HoldersType, HoldingNominee, Profile, Summary,
     Transaction, TransactionMode, TransactionType, Transactions, XfinaDepositAccount, XfinaSummary,
 };
 use crate::models::validation::{check_row_balances, ParseResult, SummaryCheck, ValidationReport};
 use crate::models::{mask_account_number, normalize_person_name};
-use chrono::{FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{NaiveDate, NaiveDateTime};
 use regex::Regex;
 use rust_decimal::Decimal;
 
@@ -143,17 +144,10 @@ pub(crate) fn parse_decoded(
         if row_vec[0].contains("Generated On:") {
             if row_vec.len() > 1 {
                 let gen_str = row_vec[1].trim();
-                let ist_offset = FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
                 if let Ok(dt) = NaiveDateTime::parse_from_str(gen_str, "%d-%b-%Y %H:%M:%S") {
-                    xfina_account.generated_date = ist_offset
-                        .from_local_datetime(&dt)
-                        .single()
-                        .map(|d| d.with_timezone(&Utc));
+                    xfina_account.generated_date = Some(date_utils::ist_to_utc(dt));
                 } else if let Ok(d) = NaiveDate::parse_from_str(gen_str, "%d-%b-%Y") {
-                    xfina_account.generated_date = ist_offset
-                        .from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
-                        .single()
-                        .map(|d| d.with_timezone(&Utc));
+                    xfina_account.generated_date = Some(date_utils::ist_midnight(d));
                 }
             }
             continue;
@@ -214,13 +208,7 @@ pub(crate) fn parse_decoded(
                 None
             };
 
-            // Convert IST to UTC for transactions
-            let ist_offset = FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-            let tx_dt = date.and_hms_opt(0, 0, 0).unwrap();
-            let utc_tx_dt = ist_offset
-                .from_local_datetime(&tx_dt)
-                .single()
-                .map(|d| d.with_timezone(&Utc));
+            let utc_tx_dt = Some(date_utils::ist_midnight(date));
 
             parsed_transactions.push(Transaction {
                 txn_id: None,

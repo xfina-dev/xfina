@@ -6,7 +6,7 @@ use crate::models::deposit::{
 use crate::models::mask_account_number;
 use crate::models::txn_order::reorder_same_day_transactions;
 use crate::models::validation::{check_row_balances, ParseResult, SummaryCheck, ValidationReport};
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::NaiveDate;
 use regex::Regex;
 use rust_decimal::Decimal;
 
@@ -48,12 +48,7 @@ pub(crate) fn parse_decoded(
         if let Some(caps) = re.captures(fname) {
             if let Some(m) = caps.get(1) {
                 if let Ok(d) = NaiveDate::parse_from_str(m.as_str(), "%d-%m-%Y") {
-                    let dt = d.and_hms_opt(0, 0, 0).unwrap();
-                    let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-                    xfina_account.generated_date =
-                        chrono::TimeZone::from_local_datetime(&ist_offset, &dt)
-                            .single()
-                            .map(|dt| dt.with_timezone(&Utc));
+                    xfina_account.generated_date = Some(crate::models::date_utils::ist_midnight(d));
                     date_only_paths.push("xfina.generatedDate".to_string());
                     // From the filename, not the statement.
                     xfina_account.generated_date_derived = Some(true);
@@ -165,9 +160,9 @@ pub(crate) fn parse_decoded(
                 };
 
                 parsed_transactions.push(Transaction {
-                    transaction_timestamp: Some(
-                        Utc.from_utc_datetime(&parsed_date.and_hms_opt(0, 0, 0).unwrap()),
-                    ),
+                    transaction_timestamp: Some(crate::models::date_utils::ist_midnight(
+                        parsed_date,
+                    )),
                     value_date: Some(parsed_date),
                     narration: desc.to_string(),
                     reference: if ref_num.is_empty() {

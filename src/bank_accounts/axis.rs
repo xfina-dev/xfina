@@ -1,3 +1,4 @@
+use crate::models::date_utils;
 use crate::models::deposit::{
     DepositAccount, FiType, Holder, Holders, HoldersType, HoldingNominee, Profile, Summary,
     Transaction, TransactionMode, TransactionType, Transactions, XfinaDepositAccount, XfinaHolder,
@@ -5,7 +6,7 @@ use crate::models::deposit::{
 };
 use crate::models::mask_account_number;
 use crate::models::validation::{check_row_balances, ParseResult, SummaryCheck, ValidationReport};
-use chrono::{FixedOffset, NaiveDate, TimeZone, Utc};
+use chrono::NaiveDate;
 use regex::Regex;
 use rust_decimal::Decimal;
 
@@ -47,12 +48,7 @@ pub(crate) fn parse_decoded(
         if let Some(caps) = re.captures(fname) {
             if let Some(m) = caps.get(1) {
                 if let Ok(d) = NaiveDate::parse_from_str(m.as_str(), "%d-%m-%Y") {
-                    let dt = d.and_hms_opt(0, 0, 0).unwrap();
-                    let ist_offset = FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-                    xfina_account.generated_date = ist_offset
-                        .from_local_datetime(&dt)
-                        .single()
-                        .map(|d| d.with_timezone(&Utc));
+                    xfina_account.generated_date = Some(date_utils::ist_midnight(d));
                     date_only_paths.push("xfina.generatedDate".to_string());
                     // From the filename, not the statement.
                     xfina_account.generated_date_derived = Some(true);
@@ -222,11 +218,7 @@ pub(crate) fn parse_decoded(
                 };
 
                 if let Some(p_date) = parsed_date {
-                    let ist_offset = FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-                    let txn_timestamp = ist_offset
-                        .from_local_datetime(&p_date.and_hms_opt(0, 0, 0).unwrap())
-                        .single()
-                        .map(|dt| dt.with_timezone(&Utc));
+                    let txn_timestamp = Some(date_utils::ist_midnight(p_date));
 
                     parsed_transactions.push(Transaction {
                         transaction_timestamp: txn_timestamp,

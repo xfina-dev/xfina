@@ -63,12 +63,7 @@ fn parse_workbook(
         if let Some(caps) = re.captures(fname) {
             if let Some(m) = caps.get(1) {
                 if let Ok(d) = NaiveDate::parse_from_str(m.as_str(), "%d-%m-%Y") {
-                    let dt = d.and_hms_opt(0, 0, 0).unwrap();
-                    let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-                    xfina_account.generated_date =
-                        chrono::TimeZone::from_local_datetime(&ist_offset, &dt)
-                            .single()
-                            .map(|dt| dt.with_timezone(&Utc));
+                    xfina_account.generated_date = Some(date_utils::ist_midnight(d));
                     date_only_paths.push("xfina.generatedDate".to_string());
                     // From the filename, not the statement.
                     xfina_account.generated_date_derived = Some(true);
@@ -208,7 +203,7 @@ fn parse_workbook(
                     parsed_date = parse_partial_date(date_str, stmt_date);
                 }
             }
-            let parsed_naive = parsed_date.map(|dt| dt.with_timezone(&Utc).date_naive());
+            let parsed_naive = parsed_date.map(crate::models::date_utils::ist_date);
             if !date_only_paths.contains(&"transactions.transaction.txnDate".to_string()) {
                 date_only_paths.push("transactions.transaction.txnDate".to_string());
                 date_only_paths.push("transactions.transaction.valueDate".to_string());
@@ -288,13 +283,13 @@ fn parse_workbook(
         } else {
             if txns.start_date.is_none() {
                 if let Some(first) = transactions_list.first() {
-                    txns.start_date = first.txn_date.map(|dt| dt.with_timezone(&Utc).date_naive());
+                    txns.start_date = first.txn_date.map(crate::models::date_utils::ist_date);
                     xfina_txns.start_date_derived = Some(true);
                 }
             }
             if txns.end_date.is_none() {
                 if let Some(last) = transactions_list.last() {
-                    txns.end_date = last.txn_date.map(|dt| dt.with_timezone(&Utc).date_naive());
+                    txns.end_date = last.txn_date.map(crate::models::date_utils::ist_date);
                     xfina_txns.end_date_derived = Some(true);
                 }
             }
@@ -469,11 +464,7 @@ fn parse_datetime(val: &str) -> Option<DateTime<Utc>> {
 }
 
 fn ist_midnight(naive: NaiveDate) -> Option<DateTime<Utc>> {
-    let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-    let ndt = naive.and_hms_opt(0, 0, 0).unwrap();
-    chrono::TimeZone::from_local_datetime(&ist_offset, &ndt)
-        .single()
-        .map(|dt| dt.with_timezone(&Utc))
+    Some(date_utils::ist_midnight(naive))
 }
 
 fn parse_partial_date(val: &str, stmt_date: NaiveDate) -> Option<DateTime<Utc>> {

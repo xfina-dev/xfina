@@ -65,12 +65,7 @@ pub(crate) fn parse_decoded(
         if let Some(caps) = re.captures(fname) {
             if let Some(m) = caps.get(1) {
                 if let Ok(d) = NaiveDate::parse_from_str(m.as_str(), "%d-%m-%Y") {
-                    let dt = d.and_hms_opt(0, 0, 0).unwrap();
-                    let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-                    xfina_account.generated_date =
-                        chrono::TimeZone::from_local_datetime(&ist_offset, &dt)
-                            .single()
-                            .map(|dt| dt.with_timezone(&Utc));
+                    xfina_account.generated_date = Some(crate::models::date_utils::ist_midnight(d));
                     date_only_paths.push("xfina.generatedDate".to_string());
                     // From the filename; cleared below if the statement prints
                     // its own Statement Date.
@@ -193,13 +188,8 @@ pub(crate) fn parse_decoded(
                         let d = parse_date(val);
                         summary.last_statement_date = d;
                         if let Some(date) = d {
-                            let dt = date.and_hms_opt(0, 0, 0).unwrap();
-                            let ist_offset =
-                                chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
                             xfina_account.generated_date =
-                                chrono::TimeZone::from_local_datetime(&ist_offset, &dt)
-                                    .single()
-                                    .map(|dt| dt.with_timezone(&Utc));
+                                Some(crate::models::date_utils::ist_midnight(date));
                             // The statement printed its own date, so this
                             // is no longer an estimate.
                             xfina_account.generated_date_derived = None;
@@ -246,7 +236,7 @@ pub(crate) fn parse_decoded(
                     .trim()
                     .to_string();
                 let txn_dt = parse_datetime(at(row, cols.date));
-                let txn_date_naive = txn_dt.map(|dt| dt.with_timezone(&Utc).date_naive());
+                let txn_date_naive = txn_dt.map(crate::models::date_utils::ist_date);
                 let desc = at(row, cols.description).to_string();
                 let ty = cols.debit_credit.map(|c| at(row, c)).unwrap_or("");
                 let txn_type = if ty == "Cr" {
@@ -399,11 +389,11 @@ pub(crate) fn parse_decoded(
         xfina_txns.end_date_derived = Some(true);
     } else {
         if let Some(first) = transactions_list.first() {
-            txns.start_date = first.txn_date.map(|dt| dt.with_timezone(&Utc).date_naive());
+            txns.start_date = first.txn_date.map(crate::models::date_utils::ist_date);
             xfina_txns.start_date_derived = Some(true);
         }
         if let Some(last) = transactions_list.last() {
-            txns.end_date = last.txn_date.map(|dt| dt.with_timezone(&Utc).date_naive());
+            txns.end_date = last.txn_date.map(crate::models::date_utils::ist_date);
             xfina_txns.end_date_derived = Some(true);
         }
     }
@@ -678,7 +668,6 @@ fn parse_date(val: &str) -> Option<NaiveDate> {
 /// Transaction times, in IST: "dd/mm/yyyy / hh:mm". Older templates print
 /// the date alone.
 fn parse_datetime(val: &str) -> Option<DateTime<Utc>> {
-    let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
     let val = val.trim();
     let ndt = NaiveDateTime::parse_from_str(val, "%d/%m/%Y / %H:%M")
         .ok()
@@ -688,9 +677,7 @@ fn parse_datetime(val: &str) -> Option<DateTime<Utc>> {
                 .ok()
                 .map(|d| d.and_hms_opt(0, 0, 0).unwrap())
         })?;
-    chrono::TimeZone::from_local_datetime(&ist_offset, &ndt)
-        .single()
-        .map(|dt| dt.with_timezone(&Utc))
+    Some(crate::models::date_utils::ist_to_utc(ndt))
 }
 
 /// HDFC heads its transaction table with a primary / add-on holder column, and

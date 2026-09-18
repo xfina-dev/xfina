@@ -387,12 +387,7 @@ fn filename_date(filename: Option<&str>) -> Option<DateTime<Utc>> {
 }
 
 fn to_ist_utc(date: NaiveDate) -> DateTime<Utc> {
-    let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-    let ndt = date.and_hms_opt(0, 0, 0).unwrap();
-    chrono::TimeZone::from_local_datetime(&ist_offset, &ndt)
-        .single()
-        .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or_else(|| ndt.and_utc())
+    crate::models::date_utils::ist_midnight(date)
 }
 
 /// Address lines arrive with trailing commas and doubled spaces from the merged cell.

@@ -68,6 +68,16 @@ commit message is permanent, and a published tag is worse.
 1. **Timezones & Dates:** 
    - Use `NaiveDate` (from `chrono`) for fields that are strictly dates (e.g. statement start/end dates).
    - Use `DateTime<Utc>` for timestamps (e.g. transaction exact times). When parsing local Indian dates from statements, parse them using `Asia/Kolkata` (IST `+05:30`) timezone offset before converting to `Utc`.
+   - **Everything is IST, including dates with no time.** Go through
+     `models::date_utils`: `ist_to_utc` for a local timestamp, `ist_midnight`
+     for a date that has to become one, and `ist_date` to read the calendar
+     date back off an instant. Never build the offset by hand, and never reach
+     for `DateTime::date_naive()` on a statement timestamp -- that is the UTC
+     day, which is the day before for anything earlier than 05:30 IST.
+   - A date-only value serializes as midnight IST in both schemas: the epoch
+     of 00:00+05:30 in `xfina`, and the Indian calendar date in `rebit` (which
+     is what `date_only_paths` marks). One convention, so dates and timestamps
+     in the same document can be compared.
 2. **Standardized Naming:**
    - Always use full institution names across parsers and UI: `"HDFC Bank"`, `"ICICI Bank"`, `"State Bank of India"`, `"Bank of Baroda"`.
 3. **Transaction Sorting:** Parsed transactions should generally be emitted in chronological (ascending) order.
