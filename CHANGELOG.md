@@ -44,22 +44,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unquoted is printed as a zero and is reported as absent, never as a price of
   zero. The sheet's own date is used, never the clock or the filename; where the
   printed date is a real day read either way round, the file's creation stamp
-  settles it, and a sheet that nothing can date is refused. Sheets whose text
-  layer is damaged — adjacent figures run together, or two headings drawn over
-  each other — are refused rather than read into whichever column they appear
-  to fall under. A handful published with the table collapsed into a flow, where
-  the figures are all present and in order but no two rows begin at the same
-  place, are read by the order they are printed in and carry
-  `figuresMatchedByOrder` so a caller can tell them from the rest; that only
-  happens when every row accounts for every heading exactly once.
+  settles it, and a sheet that nothing can date is refused. Where the rows do not
+  line up under any heading, the figures are matched to the headings by the order
+  both are printed in, and the sheet carries `figuresMatchedByOrder` so a caller
+  can tell it from the rest; that is only reached when every row accounts for
+  every heading exactly once. Twenty-one sheets of the 1,828 published so far are
+  refused outright: this reader cannot measure the glyph widths of the font they
+  are set in, so the positions it computes drift until separate headings land on
+  top of each other and the columns cannot be placed at all. Those sheets are
+  sound — other readers have no trouble with them — and the limitation is ours.
 - **Reference documents:** a `reference_rates` category and a `Parsed` enum, so a
   format can produce something other than an account. The registry stays the one
   table that defines what xfina can read.
 - **Web:** a rate sheet gets its own view — the day it was published, and a table
   of every currency against the columns that day quoted, headed as the sheet
   headed them. A column the sheet left unquoted reads as a dash rather than a
-  zero, a currency quoted per hundred units says so beside its name, and a sheet
-  read by the order its figures were printed in says that too. Without this a
+  zero and a currency quoted per hundred units says so beside its name. Without
+  this a
   rate sheet parsed and then belonged to no heading, so it disappeared from the
   page instead of being shown.
 - **Test data:** fixtures for five layout eras in `../xfina-test-data/`, and two

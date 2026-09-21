@@ -14,8 +14,9 @@
 //! - `2023-06-23` -- each row's label set on a different baseline from its
 //!   figures, a `FOREX TRAVEL CARD` heading spread over two printed lines,
 //!   and a `PC BUY` column that later sheets drop.
-//! - `2024-07-02` -- published with the wrong advance widths, so its headings
-//!   are drawn across each other. Refused, and the negative test says so.
+//! - `2024-07-02` -- set in a font whose glyph widths this reader cannot
+//!   measure, so its headings come out drawn across each other. Refused, and
+//!   the negative test says so.
 //! - `2026-02-07` -- one page, `FOREX TRAVEL CARD` columns, a footnote that
 //!   wraps mid-phrase, and a currency quoted per hundred that earlier sheets
 //!   did not list.
@@ -239,19 +240,22 @@ fn reads_a_collapsed_table_by_order_and_says_so() {
 }
 
 #[test]
-fn refuses_a_sheet_whose_headings_cannot_be_read() {
+fn refuses_a_sheet_whose_columns_cannot_be_placed() {
     with_fixtures(|dir| {
-        // Published with the wrong advance widths: two headings are drawn across
-        // each other and their letters interleave, so nothing on the page says
-        // which rate a figure is. Counting along the row would answer anyway, and
-        // wrongly -- the column order has changed twice in six years.
+        // This sheet is sound -- other readers extract it cleanly -- but it is
+        // set in a font whose glyph widths this one cannot measure. Every glyph
+        // is advanced by the same amount instead, so the positions drift until
+        // separate headings land on top of each other and nothing on the page
+        // says which rate a figure is. Counting along the row would answer
+        // anyway, and wrongly: the column order has changed twice in six years.
         let bytes = read(dir, "2024-07-02.pdf");
         let err = parse_sbi_forex_card_rates(ParseRequest::new(&bytes))
-            .expect_err("a sheet with unreadable headings must not be read");
+            .expect_err("a sheet whose columns cannot be placed must not be read");
         assert_eq!(err.kind(), "parse_error");
         assert!(
-            err.to_string().contains("unreadable column heading"),
-            "the refusal must say what could not be read, got: {err}"
+            err.to_string()
+                .contains("Could not place the column headings"),
+            "the refusal must say what could not be done, got: {err}"
         );
     });
 }
