@@ -275,10 +275,7 @@ pub fn parse_cas_lines(
         if let Some(caps) = re.captures(fname) {
             if let Some(m) = caps.get(1) {
                 if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(m.as_str(), "%d%m%Y%H%M%S") {
-                    let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
-                    let utc_dt = chrono::TimeZone::from_local_datetime(&ist_offset, &dt)
-                        .single()
-                        .map(|dt| dt.with_timezone(&chrono::Utc));
+                    let utc_dt = Some(crate::models::date_utils::ist_to_utc(dt));
                     if let Some(ref mut xfina) = account.xfina {
                         xfina.generated_date = utc_dt;
                         // From the filename, not the statement body.

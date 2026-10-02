@@ -7,7 +7,7 @@ use crate::models::validation::{
     check_row_balances, ParseResult, SummaryCheck, SummarySource, ValidationReport,
 };
 use crate::models::{mask_account_number, strip_honorific};
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{NaiveDate, Utc};
 use regex::Regex;
 use rust_decimal::Decimal;
 
@@ -77,13 +77,9 @@ pub(crate) fn parse_decoded(
             let _min = caps.get(5).unwrap().as_str().parse::<u32>().unwrap();
             let _sec = caps.get(6).unwrap().as_str().parse::<u32>().unwrap();
             if let Some(d) = NaiveDate::from_ymd_opt(year, month, day) {
-                let dt = d.and_hms_opt(0, 0, 0).unwrap();
-                let ist_offset = chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
                 // Held back rather than assigned: the statement's own printed
                 // date takes precedence, and this is the fallback.
-                filename_generated = chrono::TimeZone::from_local_datetime(&ist_offset, &dt)
-                    .single()
-                    .map(|dt| dt.with_timezone(&Utc));
+                filename_generated = Some(crate::models::date_utils::ist_midnight(d));
                 if !date_only_paths.contains(&"xfina.generatedDate".to_string()) {
                     date_only_paths.push("xfina.generatedDate".to_string());
                 }
@@ -172,13 +168,8 @@ pub(crate) fn parse_decoded(
                         if let Ok(parsed) =
                             NaiveDate::parse_from_str(caps.get(1).unwrap().as_str(), "%d-%m-%Y")
                         {
-                            let dt = parsed.and_hms_opt(0, 0, 0).unwrap();
-                            let ist_offset =
-                                chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap();
                             xfina_account.generated_date =
-                                chrono::TimeZone::from_local_datetime(&ist_offset, &dt)
-                                    .single()
-                                    .map(|dt| dt.with_timezone(&Utc));
+                                Some(crate::models::date_utils::ist_midnight(parsed));
                             if !date_only_paths.contains(&"xfina.generatedDate".to_string()) {
                                 date_only_paths.push("xfina.generatedDate".to_string());
                             }
@@ -403,9 +394,7 @@ pub(crate) fn parse_decoded(
 
                 let tx = Transaction {
                     txn_id: None,
-                    transaction_timestamp: Some(
-                        Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap()),
-                    ),
+                    transaction_timestamp: Some(crate::models::date_utils::ist_midnight(date)),
                     value_date,
                     narration,
                     reference: None,
