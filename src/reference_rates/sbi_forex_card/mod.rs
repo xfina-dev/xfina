@@ -48,13 +48,34 @@ pub(crate) fn parse_decoded(
     _input: &ParseRequest<'_>,
 ) -> Result<ParseResult<RateSheet>, XfinaError> {
     let doc = decoded.pdf()?;
-    let pages = doc.pages()?;
+    let glyphs = doc.pages()?;
+
+    // A PDF with no text in it at all has nothing for the title check to
+    // find, and saying only that it is not a rate sheet would be wrong about
+    // the cause. At least one SBI sheet has been published that way: printed
+    // to PDF with every letter drawn as an outline. Reading that would take
+    // OCR, which this does not do. It stays a refusal of the format, since
+    // nothing here says whose sheet it is.
+    if glyphs.iter().all(|page| page.is_empty()) {
+        return Err(XfinaError::InvalidFormat(
+            "No text layer: every page of this PDF is drawn as shapes or images, \
+             with no text to read, so it cannot be read as an SBI forex card rate \
+             sheet without OCR"
+                .to_string(),
+        ));
+    }
+
+    let pages: Vec<Vec<Cell>> = glyphs
+        .iter()
+        .zip(doc.pen_moves()?)
+        .map(|(page, moves)| cells(page, moves))
+        .collect();
 
     // The sheet names itself in its title. Without that this would read any
     // PDF that happened to hold a grid of numbers.
     if !pages
         .first()
-        .map(|page| page_text(&cells(page)).contains(SHEET_TITLE))
+        .map(|page| page_text(page).contains(SHEET_TITLE))
         .unwrap_or(false)
     {
         return Err(XfinaError::InvalidFormat(
@@ -62,14 +83,12 @@ pub(crate) fn parse_decoded(
         ));
     }
 
-    let front = cells(&pages[0]);
-    let (date, time) = sheet_date(&front, doc.creation_date())?;
+    let (date, time) = sheet_date(&pages[0], doc.creation_date())?;
 
     // Both tables print the same currencies in the same shape, so the only
     // thing distinguishing them is this line.
     let reference = pages
         .iter()
-        .map(|page| cells(page))
         .find(|page| {
             let text = page_text(page);
             text.contains(REFERENCE_MARKER) || text.contains(REFERENCE_BAND)
@@ -80,9 +99,10 @@ pub(crate) fn parse_decoded(
             )
         })?;
 
-    let columns = columns(&reference)?;
-    let per_hundred = per_hundred_currencies(&reference)?;
-    let (currencies, figures_matched_by_order) = currency_rows(&reference, &columns, &per_hundred)?;
+    let (columns, placed) = columns(reference)?;
+    let per_hundred = per_hundred_currencies(reference)?;
+    let (currencies, figures_matched_by_order) =
+        currency_rows(reference, &columns, placed, &per_hundred)?;
 
     if currencies.is_empty() {
         return Err(XfinaError::ParseError(
@@ -186,14 +206,15 @@ struct Column {
     hi: f64,
 }
 
-/// Reads the table's headings and the span of page each one covers.
+/// Reads the table's headings and the span of page each one covers, and
+/// whether those spans can be trusted to place a figure.
 ///
 /// Column identity comes from the heading, never from a figure's position in
 /// the row. The sheet has been printed with nine columns and with eight, and
 /// has renamed one of them twice, so counting along a row lands on a different
 /// rate depending on the year -- which is exactly how a travel-card rate ends
 /// up published as a telegraphic-transfer one.
-fn columns(page: &[Cell]) -> Result<Vec<Column>, XfinaError> {
+fn columns(page: &[Cell]) -> Result<(Vec<Column>, bool), XfinaError> {
     let anchor = page
         .iter()
         .find(|cell| normalize(&cell.text) == "TT BUY")
@@ -205,7 +226,7 @@ fn columns(page: &[Cell]) -> Result<Vec<Column>, XfinaError> {
 
     // Everything on the heading block, from the first rate column rightwards.
     // The row-label heading ("CURRENCY") sits to the left and is not a rate.
-    let mut heads: Vec<&Cell> = page
+    let written: Vec<&Cell> = page
         .iter()
         .filter(|cell| {
             (cell.yc - anchor.yc).abs() <= HEADING_TOLERANCE
@@ -213,6 +234,7 @@ fn columns(page: &[Cell]) -> Result<Vec<Column>, XfinaError> {
                 && !normalize(&cell.text).is_empty()
         })
         .collect();
+    let mut heads = written.clone();
     heads.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
 
     // A heading set over two or three lines -- "FOREX TRAVEL" above "CARD BUY"
@@ -277,21 +299,69 @@ fn columns(page: &[Cell]) -> Result<Vec<Column>, XfinaError> {
     // as one.
     //
     // That happens on sheets set in a font whose glyph widths this reader
-    // cannot measure. It advances every glyph by the same amount instead, so
-    // the positions it reports drift and separate headings come out on top of
-    // each other. The sheet is fine and other readers have no trouble with it;
-    // the measurement is ours. Stopping here is honest about that, where
-    // carrying on would attach figures to a heading assembled out of two.
-    if let Some(odd) = columns.iter().find(|c| {
-        let words = c.key.split('_').count();
-        !(c.key.ends_with("_buy") || c.key.ends_with("_sell")) || words > HEADING_WORDS
-    }) {
-        return Err(XfinaError::ParseError(format!(
+    // cannot measure. It advances every glyph by a full em instead, so each
+    // run of text is drawn about twice its real width and the headings come
+    // out on top of each other. The sheet is fine and other readers have no
+    // trouble with it; the measurement is ours.
+    let Some(odd) = columns.iter().find(|c| !names_a_rate(&c.key)) else {
+        return Ok((columns, true));
+    };
+
+    // What survives the bad widths is the order the headings were written
+    // in, left to right, a heading set over two lines written top line first.
+    // Read that way they are the sheet's own column names, but nothing about
+    // where they sit can be trusted, so the figures have to be matched by
+    // order too -- and only a row that accounts for every one of these
+    // headings exactly once will be.
+    match columns_in_written_order(&written) {
+        Some(columns) => Ok((columns, false)),
+        None => Err(XfinaError::ParseError(format!(
             "Could not place the column headings on this SBI forex card rate sheet; read '{}' as one heading",
             odd.key
-        )));
+        ))),
     }
-    Ok(columns)
+}
+
+/// Whether a heading key is the name of one rate: a side of the trade, in no
+/// more words than any column the sheet has printed.
+fn names_a_rate(key: &str) -> bool {
+    (key.ends_with("_buy") || key.ends_with("_sell")) && key.split('_').count() <= HEADING_WORDS
+}
+
+/// The headings in the order the sheet wrote them, each one closed by the side
+/// of the trade it names, so "FOREX TRAVEL" followed by "CARD BUY" is one.
+///
+/// `None` unless that accounts for every heading cell, names only rates, and
+/// names none of them twice. The columns carry no usable position.
+fn columns_in_written_order(written: &[&Cell]) -> Option<Vec<Column>> {
+    let mut keys: Vec<String> = Vec::new();
+    let mut pending: Vec<&str> = Vec::new();
+    for cell in written {
+        pending.push(&cell.text);
+        let key = key_of(&normalize(&pending.join(" ")));
+        if key.ends_with("_buy") || key.ends_with("_sell") {
+            keys.push(key);
+            pending.clear();
+        }
+    }
+    let mut seen = HashSet::new();
+    let sound = pending.is_empty()
+        && !keys.is_empty()
+        && keys
+            .iter()
+            .all(|k| names_a_rate(k) && seen.insert(k.clone()));
+    let left = written.iter().fold(f64::MAX, |m, c| m.min(c.x0));
+    sound.then(|| {
+        keys.into_iter()
+            .map(|key| Column {
+                key,
+                x0: left,
+                x1: left,
+                lo: f64::MIN,
+                hi: f64::MAX,
+            })
+            .collect()
+    })
 }
 
 // -----------------------------------------------------------------------------
@@ -299,9 +369,16 @@ fn columns(page: &[Cell]) -> Result<Vec<Column>, XfinaError> {
 // -----------------------------------------------------------------------------
 
 /// Reads one row per currency the sheet quotes, in printed order.
+///
+/// `placed` says whether the columns' positions can be trusted. When they
+/// cannot, neither can the figures': the same mismeasured widths that ran the
+/// headings together shift every figure written after the first in a run, far
+/// enough to overtake one placed on its own. Both are then taken in the order
+/// they were written.
 fn currency_rows(
     page: &[Cell],
     columns: &[Column],
+    placed: bool,
     per_hundred: &HashSet<String>,
 ) -> Result<(Vec<CurrencyRates>, bool), XfinaError> {
     let leftmost = columns.iter().fold(f64::MAX, |m, c| m.min(c.x0));
@@ -376,12 +453,16 @@ fn currency_rows(
                 .join(" "),
         );
 
+        // Gathered in the order they were written; sorted across the page
+        // only where the page can be trusted to say.
         let mut found = figures.remove(&row).unwrap_or_default();
-        found.sort_by(|a, b| {
-            a.0.x0
-                .partial_cmp(&b.0.x0)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        if placed {
+            found.sort_by(|a, b| {
+                a.0.x0
+                    .partial_cmp(&b.0.x0)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
         positions.push((code.clone(), found.clone()));
         rows.push((
             code.clone(),
@@ -393,10 +474,14 @@ fn currency_rows(
     // Where each figure sits decides which rate it is. That is the whole point
     // of reading the headings, and it is right for all but a handful of the
     // sheets ever published.
-    let placed: Option<Vec<_>> = positions
-        .iter()
-        .map(|(_, found)| by_position(found, columns))
-        .collect();
+    let by_place: Option<Vec<_>> = if placed {
+        positions
+            .iter()
+            .map(|(_, found)| by_position(found, columns))
+            .collect()
+    } else {
+        None
+    };
 
     // A few sheets are published with the table collapsed into a flow: the
     // figures are all there and in order, but no two rows start at the same
@@ -405,7 +490,7 @@ fn currency_rows(
     // every heading exactly once on every row -- the sheets whose figures run
     // together print a different count on different rows and are refused here
     // rather than read into the wrong column.
-    let (assigned, by_order) = match placed {
+    let (assigned, by_order) = match by_place {
         Some(assigned) => (assigned, false),
         None => {
             let ordered: Option<Vec<_>> = rows
@@ -723,7 +808,7 @@ mod tests {
         assert!(read_date("18-09-2026", None).is_ok());
         assert!(read_time("9:30 AM").is_some());
         assert!(per_hundred_currencies(&[]).is_err());
-        assert!(currency_rows(&[], &[], &HashSet::new()).is_ok());
+        assert!(currency_rows(&[], &[], true, &HashSet::new()).is_ok());
     }
 
     #[test]
@@ -790,6 +875,38 @@ mod tests {
         // rather than being folded into a single invented one.
         assert_eq!(key_of("TC BUY"), "tc_buy");
         assert_eq!(key_of("FTC BUY"), "ftc_buy");
+    }
+
+    fn heading(text: &str) -> Cell {
+        Cell {
+            text: text.to_string(),
+            x0: 0.0,
+            x1: 0.0,
+            y0: 0.0,
+            yc: 0.0,
+        }
+    }
+
+    fn written_order(texts: &[&str]) -> Option<Vec<String>> {
+        let cells: Vec<Cell> = texts.iter().map(|t| heading(t)).collect();
+        let refs: Vec<&Cell> = cells.iter().collect();
+        columns_in_written_order(&refs).map(|cols| cols.into_iter().map(|c| c.key).collect())
+    }
+
+    #[test]
+    fn headings_in_written_order_close_on_the_side_of_the_trade() {
+        // A heading set over two lines is written top line first, and the top
+        // line names no side of the trade -- so it waits for the line below.
+        assert_eq!(
+            written_order(&["TT BUY", "TT SELL", "FOREX TRAVEL ", "CARD BUY", "CN SELL"]).unwrap(),
+            vec!["tt_buy", "tt_sell", "forex_travel_card_buy", "cn_sell"]
+        );
+        // A heading left open at the end is not a column.
+        assert_eq!(written_order(&["TT BUY", "FOREX TRAVEL"]), None);
+        // Nor is one too long to be a single rate, or one printed twice.
+        assert_eq!(written_order(&["FOREX", "TRAVEL", "CARD", "TT BUY"]), None);
+        assert_eq!(written_order(&["TT BUY", "TT BUY"]), None);
+        assert_eq!(written_order(&[]), None);
     }
 
     #[test]

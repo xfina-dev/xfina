@@ -7,7 +7,7 @@
 //! repository whatever it holds, so a rate sheet is kept beside the statements
 //! rather than made the one exception.
 //!
-//! The four fixtures are one per layout era, chosen for what each one breaks:
+//! The fixtures are one per layout era, chosen for what each one breaks:
 //!
 //! - `2020-01-06` -- two tables on two pages, `TC BUY`/`TC SELL` columns, and
 //!   a slashed date that is a real day either way round.
@@ -15,14 +15,17 @@
 //!   figures, a `FOREX TRAVEL CARD` heading spread over two printed lines,
 //!   and a `PC BUY` column that later sheets drop.
 //! - `2024-07-02` -- set in a font whose glyph widths this reader cannot
-//!   measure, so its headings come out drawn across each other. Refused, and
-//!   the negative test says so.
+//!   measure, so its headings come out drawn across each other and nothing
+//!   lines up. Read by the order its headings and figures were written in,
+//!   and says so.
 //! - `2026-02-07` -- one page, `FOREX TRAVEL CARD` columns, a footnote that
 //!   wraps mid-phrase, and a currency quoted per hundred that earlier sheets
 //!   did not list.
 //! - `2021-05-25` -- the table collapsed into a flow, where no two rows begin
 //!   at the same place and nothing lines up under a heading. Read by the order
 //!   the figures are printed in, and says so.
+//! - `2024-09-06` -- printed to PDF with every letter drawn as an outline, so
+//!   there is no text to read. Refused, and says why.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -64,6 +67,7 @@ fn reads_every_layout_era() {
             "2020-01-06.pdf",
             "2021-05-25.pdf",
             "2023-06-23.pdf",
+            "2024-07-02.pdf",
             "2026-02-07.pdf",
         ] {
             let bytes = read(dir, name);
@@ -82,7 +86,7 @@ fn reads_every_layout_era() {
             }
             checked += 1;
         }
-        assert_eq!(checked, 4, "every era fixture must be checked");
+        assert_eq!(checked, 5, "every era fixture must be checked");
     });
 }
 
@@ -240,22 +244,59 @@ fn reads_a_collapsed_table_by_order_and_says_so() {
 }
 
 #[test]
-fn refuses_a_sheet_whose_columns_cannot_be_placed() {
+fn reads_a_sheet_whose_columns_cannot_be_placed_by_written_order() {
     with_fixtures(|dir| {
         // This sheet is sound -- other readers extract it cleanly -- but it is
         // set in a font whose glyph widths this one cannot measure. Every glyph
-        // is advanced by the same amount instead, so the positions drift until
-        // separate headings land on top of each other and nothing on the page
-        // says which rate a figure is. Counting along the row would answer
-        // anyway, and wrongly: the column order has changed twice in six years.
+        // is advanced by a full em instead, so separate headings land on top of
+        // each other and no figure sits under the heading it belongs to.
+        //
+        // What holds is the order the sheet wrote them in, heading by heading
+        // and figure by figure. The column names still come from the sheet --
+        // never from a count along the row, whose order has changed twice in
+        // six years -- and every row has to account for every one of them.
         let bytes = read(dir, "2024-07-02.pdf");
-        let err = parse_sbi_forex_card_rates(ParseRequest::new(&bytes))
-            .expect_err("a sheet whose columns cannot be placed must not be read");
-        assert_eq!(err.kind(), "parse_error");
+        let sheet = parse_sbi_forex_card_rates(ParseRequest::new(&bytes))
+            .expect("a sheet whose figures all account for its headings is readable")
+            .data;
+
         assert!(
-            err.to_string()
-                .contains("Could not place the column headings"),
-            "the refusal must say what could not be done, got: {err}"
+            sheet.figures_matched_by_order,
+            "a sheet read by order must not be reported as one the page placed"
+        );
+        assert_eq!(sheet.date.to_string(), "2024-07-02");
+        assert_eq!(
+            sheet.columns,
+            vec![
+                "tt_buy",
+                "tt_sell",
+                "bill_buy",
+                "bill_sell",
+                "forex_travel_card_buy",
+                "forex_travel_card_sell",
+                "cn_buy",
+                "cn_sell",
+            ]
+        );
+        assert_eq!(sheet.currencies.len(), 30);
+        assert_eq!(sheet.currency("USD").unwrap().rates.len(), 8);
+    });
+}
+
+#[test]
+fn refuses_a_sheet_with_no_text_layer_and_says_so() {
+    with_fixtures(|dir| {
+        // Printed to PDF with every letter drawn as a filled outline: there is
+        // no font and no text, only shapes. Reading it would take OCR. What
+        // must not happen is a refusal that blames the format, which sends
+        // whoever reads it looking for the wrong problem.
+        let bytes = read(dir, "2024-09-06.pdf");
+        let err = parse_sbi_forex_card_rates(ParseRequest::new(&bytes))
+            .expect_err("a sheet with no text cannot be read");
+        assert_eq!(err.kind(), "invalid_format");
+        assert!(
+            err.to_string().contains("No text layer"),
+            "the refusal must say there is no text to read, got: {err}"
         );
     });
 }

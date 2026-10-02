@@ -27,6 +27,16 @@ pub struct SpatialOutputDev {
     pub pages: Vec<Vec<CharItem>>,
     current_page: Vec<CharItem>,
     flip_ctm: Transform,
+    /// For each glyph in `pages`, whether the content stream set the text
+    /// position before drawing it (`Tm`, `Td`, `TD`, `T*`) rather than the
+    /// glyph following on from the one before.
+    ///
+    /// Kept beside the glyphs rather than on `CharItem`, which is public and
+    /// built field by field: a new field there would break every caller that
+    /// constructs one.
+    pen_moves: Vec<Vec<bool>>,
+    current_moves: Vec<bool>,
+    pen_moved: bool,
 }
 
 impl Default for SpatialOutputDev {
@@ -41,6 +51,9 @@ impl SpatialOutputDev {
             pages: Vec::new(),
             current_page: Vec::new(),
             flip_ctm: Transform::default(),
+            pen_moves: Vec::new(),
+            current_moves: Vec::new(),
+            pen_moved: true,
         }
     }
 }
@@ -53,12 +66,15 @@ impl OutputDev for SpatialOutputDev {
         _: Option<(f64, f64, f64, f64)>,
     ) -> Result<(), OutputError> {
         self.current_page.clear();
+        self.current_moves.clear();
+        self.pen_moved = true;
         self.flip_ctm = Transform::row_major(1., 0., 0., -1., 0., media_box.ury - media_box.lly);
         Ok(())
     }
 
     fn end_page(&mut self) -> Result<(), OutputError> {
         self.pages.push(self.current_page.clone());
+        self.pen_moves.push(self.current_moves.clone());
         Ok(())
     }
 
@@ -85,6 +101,7 @@ impl OutputDev for SpatialOutputDev {
             y1: y + scaled_h.abs(),
             upright: trm.m12.abs() <= 0.5 && trm.m21.abs() <= 0.5,
         });
+        self.current_moves.push(std::mem::take(&mut self.pen_moved));
         Ok(())
     }
 
@@ -94,9 +111,17 @@ impl OutputDev for SpatialOutputDev {
     fn end_word(&mut self) -> Result<(), OutputError> {
         Ok(())
     }
+    /// Called on every operator that sets the text position.
     fn end_line(&mut self) -> Result<(), OutputError> {
+        self.pen_moved = true;
         Ok(())
     }
+}
+
+/// Every page laid out, with where the content stream moved the pen.
+struct Layout {
+    glyphs: Vec<Vec<CharItem>>,
+    pen_moves: Vec<Vec<bool>>,
 }
 
 /// A PDF opened and decrypted once, with its expensive derivations cached.
@@ -107,7 +132,7 @@ impl OutputDev for SpatialOutputDev {
 /// layout a parser needs.
 pub struct PdfDoc {
     doc: Document,
-    pages: OnceCell<Result<Vec<Vec<CharItem>>, DecodeError>>,
+    layout: OnceCell<Result<Layout, DecodeError>>,
     page1_text: OnceCell<String>,
 }
 
@@ -123,23 +148,46 @@ impl PdfDoc {
         }
         Ok(Self {
             doc,
-            pages: OnceCell::new(),
+            layout: OnceCell::new(),
             page1_text: OnceCell::new(),
         })
     }
 
     /// Every glyph on every page, with its position and orientation.
     pub fn pages(&self) -> Result<&[Vec<CharItem>], DecodeError> {
-        self.pages
+        self.layout().map(|layout| layout.glyphs.as_slice())
+    }
+
+    /// For each glyph `pages` returns, whether the content stream set the text
+    /// position before drawing it rather than letting it follow on from the
+    /// glyph before.
+    ///
+    /// A generator positions each run of text it lays out, so this is where
+    /// the producer said one piece of text ends and another begins. It holds
+    /// when the glyph positions do not: a font whose widths cannot be read
+    /// is advanced by a guessed width, which moves every glyph after the
+    /// first in a run but not the point the run was placed at.
+    // Only the forex card reader needs this yet; the other PDF parsers cut
+    // their text by position alone.
+    #[cfg_attr(not(feature = "rt-sbi-forex-card"), allow(dead_code))]
+    pub(crate) fn pen_moves(&self) -> Result<&[Vec<bool>], DecodeError> {
+        self.layout().map(|layout| layout.pen_moves.as_slice())
+    }
+
+    fn layout(&self) -> Result<&Layout, DecodeError> {
+        self.layout
             .get_or_init(|| {
                 let mut out = SpatialOutputDev::new();
                 // The document opened, so a failure here is damage rather than
                 // a wrong guess about the format.
                 pdf_extract::output_doc(&self.doc, &mut out)
                     .map_err(|e| DecodeError::Damaged(format!("Extraction failed: {:?}", e)))?;
-                Ok(out.pages)
+                Ok(Layout {
+                    glyphs: out.pages,
+                    pen_moves: out.pen_moves,
+                })
             })
-            .as_deref()
+            .as_ref()
             .map_err(Clone::clone)
     }
 

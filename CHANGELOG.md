@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-02
+
+### Fixed
+
+- **SBI forex card rates:** sheets refused as `Could not place the column
+  headings` now read. In the archive that is 18 files, 15 distinct sheets from
+  July to October 2024. They are set in a font whose glyph widths this reader
+  cannot measure, so every run of text came out about twice its real width,
+  headings landed on top of each other and some adjacent figures fused into
+  one. Text is now also cut wherever the PDF moves the pen to place a new piece
+  of text, and when the headings still cannot be placed by position, headings
+  and figures are matched in the order the sheet wrote them, under the same
+  rule as before: every row must account for every heading exactly once. These
+  sheets carry `figuresMatchedByOrder`. Every sheet that already read is
+  unchanged, across all 1,838 archived sheets.
+- **SBI forex card rates:** a PDF with no text layer at all is refused as
+  `No text layer` rather than as `Not an SBI forex card rate sheet`. One
+  archived sheet was published that way, with every letter drawn as a filled
+  outline rather than set in a font, and the message says it cannot be read
+  without OCR, which xfina does not do.
+
 ## [0.8.0] - 2026-10-02
 
 ### Fixed

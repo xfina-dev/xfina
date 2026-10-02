@@ -44,10 +44,13 @@ pub struct RateSheet {
     ///
     /// A few sheets are published with the table collapsed into a flow, where
     /// no two rows begin at the same place and nothing lines up under a
-    /// heading. The figures are all there and in order, and are only read this
-    /// way when every row accounts for every heading exactly once -- but a
-    /// caller holding these rates to a higher standard can tell them apart
-    /// from the ones the page itself vouched for.
+    /// heading. A few more are set in a font whose glyph widths cannot be read,
+    /// which draws the headings on top of each other; those are read in the
+    /// order the headings and figures were written. Either way the figures are
+    /// all there and in order, and are only read like this when every row
+    /// accounts for every heading exactly once -- but a caller holding these
+    /// rates to a higher standard can tell them apart from the ones the page
+    /// itself vouched for.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub figures_matched_by_order: bool,
 }

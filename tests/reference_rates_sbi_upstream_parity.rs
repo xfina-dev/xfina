@@ -15,16 +15,16 @@
 //! git clone https://github.com/sahilgupta/sbi-fx-ratekeeper ../sbi-fx-ratekeeper
 //! ```
 //!
-//! Two kinds of difference are expected rather than tolerated, and both are
-//! counted so a change in either is visible:
+//! Three kinds of difference are expected rather than tolerated, and all are
+//! counted so a change in any is visible:
 //!
 //! - a zero upstream published, which is how the sheet writes "not quoted".
 //!   Those are absent here, never carried through as a price.
-//! - rows upstream read from a sheet whose figures had run together. Its text
-//!   extraction fuses adjacent numbers -- one row of its own data reads
-//!   `22.1823` followed by seven empty fields -- and every column after the
-//!   fusion shifts. Those sheets are refused here, so there is nothing to
-//!   compare; what must not happen is the two disagreeing on a sheet both read.
+//! - rows upstream read with two adjacent figures run together, so every
+//!   column after the join shifts by one. The figures are still all ours.
+//! - rows upstream read as a single number: `22.1823` followed by seven empty
+//!   fields, on the sheets whose font widths cannot be measured. That number
+//!   is the row's first figure with the start of the next one glued on.
 //!
 //! SBI republishes the card some days, and upstream keeps a row per edition
 //! where this archive keeps one file per day. A rate is therefore checked
@@ -175,7 +175,7 @@ fn every_rate_agrees_with_an_independent_reader() {
     let theirs = read_upstream(&upstream, &key_for);
 
     let (mut agreed, mut zero_absent, mut not_read) = (0usize, 0usize, 0usize);
-    let mut reattributed = 0usize;
+    let (mut reattributed, mut fused) = (0usize, 0usize);
     let mut wrong: Vec<String> = Vec::new();
 
     for (date, currencies) in &theirs {
@@ -240,8 +240,25 @@ fn every_rate_agrees_with_an_independent_reader() {
                 row.values()
                     .all(|t| *t == 0.0 || ours_here.iter().any(|v| (v - t).abs() < 0.0005))
             });
+
+            // Upstream also reads some rows as one long number with every
+            // other column empty: the row's figures run together, the first
+            // whole and the next one's digits stuck on behind it. That passes
+            // only when the number begins with the figure this parser read
+            // under the same heading -- the part upstream did read agrees.
+            let run_together = editions.values().any(|row| {
+                row.len() == 1
+                    && row.iter().all(|(heading, t)| {
+                        read(heading).is_some_and(|g| {
+                            let (g, t) = (format!("{g:.2}"), t.to_string());
+                            t.len() > g.len() && t.starts_with(&g)
+                        })
+                    })
+            });
             if accounted {
                 reattributed += 1;
+            } else if run_together {
+                fused += 1;
             } else {
                 wrong.extend(disputed);
             }
@@ -250,7 +267,8 @@ fn every_rate_agrees_with_an_independent_reader() {
 
     println!(
         "{agreed} rates agree, {zero_absent} upstream zeros correctly absent, \
-         {reattributed} rows upstream shifted, {not_read} rows skipped"
+         {reattributed} rows upstream shifted, {fused} rows upstream read as one \
+         number, {not_read} rows skipped"
     );
     assert!(
         wrong.is_empty(),
