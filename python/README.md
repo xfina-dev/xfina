@@ -36,6 +36,7 @@ with open("statement.xls", "rb") as fh:
 statement = xfina.parse(data, filename="statement.xls")
 
 statement["format"]       # "ba-hdfc"
+statement["area"]         # "personal", or "public" for rate sheets and price histories
 statement["category"]     # "bank_account"
 statement["institution"]  # "HDFC Bank"
 statement["detection"]    # how it was identified, plus the file's metadata
@@ -59,12 +60,14 @@ except xfina.XfinaParseError as e:
         prompt_for_password(e.format)   # the format the filename suggested
 ```
 
-## The four functions
+## The functions
 
 | Function | Purpose |
 |---|---|
 | `parse(bytes, password=None, filename=None, modified_timestamp=None, **{"as": None}, schema=None)` | Identify and parse a statement. |
 | `detect(bytes, password=None, filename=None, modified_timestamp=None)` | Identify a statement without parsing it. |
-| `formats()` | Every format this build knows, with `id`, `category`, `institution`, `containers` and `enabled`. |
+| `formats()` | Every format this build knows, with `id`, `area`, `category`, `institution`, `containers` and `enabled`. |
 | `version()` | The version of the parsers actually running. |
+| `series_coverage(data)` | For the `data` of a price history parse: first and last date, rows with a value, and gaps. Of that one file. |
+| `series_csv(data)` | The same `data` as CSV, in Tiingo's column layout. |
 

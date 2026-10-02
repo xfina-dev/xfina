@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
-use xfina::detect::Format;
+use xfina::detect::{Area, Format};
 use xfina::models::Schema;
 
 #[derive(Parser, Debug)]
@@ -31,9 +31,14 @@ enum Commands {
         #[arg(short, long)]
         password: Option<String>,
 
-        /// Optional output file path (defaults to <input_file_stem>.json in the same directory)
+        /// Optional output file path (defaults to <input_file_stem>.json, or
+        /// .csv with --csv, in the same directory)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Write a price series as CSV in Tiingo's column layout instead of JSON
+        #[arg(long)]
+        csv: bool,
     },
     /// Report what a file is, without parsing it
     Detect {
@@ -45,7 +50,11 @@ enum Commands {
         password: Option<String>,
     },
     /// List the formats this build can read
-    Formats,
+    Formats {
+        /// Only personal statements, or only public data
+        #[arg(long, value_enum)]
+        area: Option<AreaArg>,
+    },
     /// Dump raw text from a PDF or XLS file for development
     Dump {
         /// The input file to dump
@@ -59,6 +68,21 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum AreaArg {
+    Personal,
+    Public,
+}
+
+impl From<AreaArg> for Area {
+    fn from(a: AreaArg) -> Self {
+        match a {
+            AreaArg::Personal => Area::Personal,
+            AreaArg::Public => Area::Public,
+        }
+    }
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -182,8 +206,12 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Formats => {
-            for info in xfina::formats() {
+        Commands::Formats { area } => {
+            let wanted = area.map(Area::from);
+            for info in xfina::formats()
+                .into_iter()
+                .filter(|f| wanted.is_none_or(|a| f.area == a))
+            {
                 let locked = if info.password_protected {
                     " locked"
                 } else {
@@ -191,8 +219,9 @@ fn main() -> Result<()> {
                 };
                 let built = if info.enabled { "" } else { "  (not built)" };
                 println!(
-                    "{:10}  {:14}  {:22}  {:5}{}{}",
+                    "{:17}  {:8}  {:15}  {:36}  {:5}{}{}",
                     info.id,
+                    info.area.as_str(),
                     info.category.as_str(),
                     info.institution,
                     info.extension,
@@ -201,8 +230,8 @@ fn main() -> Result<()> {
                 );
                 // Where the file comes from, indented under its format. Getting
                 // hold of the statement is the hard part; reading it is not.
-                println!("{:12}{}", "", info.download_url);
-                println!("{:12}{}", "", info.download_path);
+                println!("{:19}{}", "", info.download_url);
+                println!("{:19}{}", "", info.download_path);
             }
         }
         Commands::Dump {
@@ -227,11 +256,12 @@ fn main() -> Result<()> {
             schema,
             password,
             output,
+            csv,
         } => {
             let (bytes, modified) = read_request(&file)?;
             let output_path = output.unwrap_or_else(|| {
                 let mut path = file.clone();
-                path.set_extension("json");
+                path.set_extension(if csv { "csv" } else { "json" });
                 path
             });
 
@@ -242,15 +272,41 @@ fn main() -> Result<()> {
                 .with_format(format);
 
             let statement = xfina::parse(request)?;
-            let json = statement.to_json_string(schema.into(), true)?;
+            let rendered = if csv {
+                match statement.data.series() {
+                    Some(series) => series.to_csv(),
+                    None => bail!(
+                        "--csv writes a price series; {} is not market data",
+                        statement.format
+                    ),
+                }
+            } else {
+                statement.to_json_string(schema.into(), true)?
+            };
 
-            fs::write(&output_path, json)?;
+            fs::write(&output_path, rendered)?;
             println!(
                 "Parsed {} ({}) to {:?}",
                 statement.institution(),
                 statement.format,
                 output_path
             );
+            // A price history is judged by what it covers; say so up front.
+            if let Some(series) = statement.data.series() {
+                let c = series.coverage();
+                match (c.first, c.last) {
+                    (Some(first), Some(last)) => println!(
+                        "  {} rows of {}, {} to {}, {} gap{}",
+                        c.rows,
+                        series.headline.as_str(),
+                        first,
+                        last,
+                        c.gaps.len(),
+                        if c.gaps.len() == 1 { "" } else { "s" }
+                    ),
+                    _ => println!("  no rows with a {} value", series.headline.as_str()),
+                }
+            }
         }
     }
 

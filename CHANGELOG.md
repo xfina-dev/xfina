@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-02
+
+### Added
+
+- **Public market data:** an `md-` family of eleven parsers for the price, NAV
+  and index history Xfina Labs' Portfolio Engine sends people to download:
+  AMFI NAV history (`md-amfi-nav`), NSE's security-wise archive and quote page
+  download (`md-nse-security`), NSE Indices' total return and historical index
+  reports (`md-nse-indices`), MCX spot prices (`md-mcx-spot`), iShares fund
+  downloads (`md-ishares`), Tiingo (`md-tiingo`), WSJ historical prices
+  (`md-wsj`), MSCI index levels (`md-msci`), Nasdaq index history
+  (`md-nasdaq`), Yahoo Finance in both the yfinance and classic shapes
+  (`md-yahoo`), and the SPDR Gold Shares archive (`md-spdr-gold`). Each is
+  recognised from its content alone; the filename only fills in what a
+  publisher leaves out of the file, such as a ticker.
+- **`PriceSeries`:** what a market data file parses into, as a new
+  `Parsed::Series`. One superset row holds every value any of the eleven
+  publishes -- traded price and its adjusted twin, NAV and adjusted NAV, total
+  return and net total return levels, and Tiingo-style `dividend` and
+  `splitFactor` on the day they happen -- and a file fills the fields it
+  prints. A file with several values a day fills several fields of one row
+  (NSE's total and net total return; SPDR's close and NAV). Everything else a
+  publisher prints is kept under its own heading in `extra`. A value that was
+  not printed is absent, never zero. The series says which field is its
+  `headline`, and `splitAdjusted` says whether its closes already reflect
+  later splits, which differs by source: Yahoo's do, Tiingo's do not. Each
+  parse is checked for rows outside the range the file declares, two
+  different values for one day, values that are not positive, and -- for
+  iShares US funds -- every distribution on the Distributions sheet being found
+  on its ex-date. ReBIT has no form for a price history (`schema_unsupported`).
+- **One file, one series.** A history downloaded in pieces comes back as one
+  series per piece; stitching pieces together is computation over parsed data
+  and is left to the caller. Against the publishers' own downloads, every one
+  of 127 is recognised with and without its name, and every NSE index piece
+  matches the full history it was cut from on all 19,409 dates compared.
+- **Personal and public areas:** every format, `FormatInfo` and parse envelope
+  now says `area` -- `personal` for a statement somebody holds, `public` for a
+  rate sheet or a price history.
+- **Bindings:** `seriesCoverage` / `series_coverage` (first and last date,
+  rows, and gaps of one parsed series) and `seriesCsv` / `series_csv` (the
+  series in Tiingo's column layout). Both take the `data` a parse returned, so
+  the file is not read twice.
+- **CLI:** `xfina parse --csv` writes a series as CSV and prints its coverage;
+  `xfina formats --area personal|public` lists one area.
+- **Web:** a Public data tab beside Personal statements. One drop zone feeds
+  both. Public files are grouped by dataset with each file's coverage, gaps and
+  checks, a preview of its newest rows, and CSV or JSON downloads. SBI rate
+  sheets move here.
+
+### Changed
+
+- **Breaking — Rust.** `Parsed` gains `Series` and `Category` gains
+  `MarketData`, so an exhaustive `match` on either needs a new arm. JSON
+  consumers see only additions: a new category value and an `area` field.
+
 ## [0.8.1] - 2026-10-02
 
 ### Fixed

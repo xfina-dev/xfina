@@ -42,7 +42,8 @@ it for the list above. `git commit --amend` and editing a PR body are cheap; a m
 commit message is permanent, and a published tag is worse.
 
 ## Architecture Overview
-- **Backend (Rust + WASM):** Financial statements (PDFs, XLS, etc.) are parsed securely entirely within the browser using Rust compiled to WebAssembly. Parsers are split into domain-specific packages (`bank-accounts/`, `credit-cards/`, `mutual-funds/`, `intl-stocks/`).
+- **Backend (Rust + WASM):** Financial statements (PDFs, XLS, etc.) are parsed securely entirely within the browser using Rust compiled to WebAssembly. Parsers are split into domain-specific packages (`bank-accounts/`, `credit-cards/`, `mutual-funds/`, `intl-stocks/`), plus two for public data (`reference_rates/`, `market_data/`).
+- **Two areas:** every format is either a *personal* statement or *public* data (`Category::area()`). Public data -- a rate sheet, a price history (`PriceSeries`) -- has no ReBIT form. Each file parses on its own: a price history split across downloads comes back as one series per file, and stitching pieces together belongs to the consumer (xfingine), never to a parser.
 - **Frontend (Vue 3 + Vite):** The user interface is built with Vue 3, Tailwind CSS, and `shadcn-vue` style components. It takes the JSON output from the WASM parsers and renders standardized views.
 - **Models (`xfina-models`):** Shared Rust data structures used to serialize data. They adhere closely to the Sahamati Account Aggregator (AA) schema standards, with our own project-specific extensions nested inside `xfina` objects (e.g. `XfinaCreditCardAccount`).
 

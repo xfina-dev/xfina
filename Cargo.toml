@@ -20,7 +20,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.1"
+version = "0.9.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/xfina-dev/xfina"
@@ -46,6 +46,7 @@ calamine = "0.36"
 rust_decimal = { version = "1.42", features = ["serde", "serde-with-float", "serde-with-str"] }
 num-traits = "0.2"
 chrono-tz = "0.10"
+quick-xml = "0.41"
 
 [dependencies]
 serde = { workspace = true }
@@ -60,6 +61,7 @@ calamine = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
 num-traits = { workspace = true, optional = true }
 chrono-tz = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
 
 # CLI Dependencies
 clap = { workspace = true, optional = true }
@@ -68,7 +70,14 @@ thiserror = "2.0.19"
 
 [features]
 default = ["all"]
-all = ["ba-hdfc", "ba-icici", "ba-sbi", "ba-bob", "ba-axis", "cc-hdfc", "cc-icici", "cc-axis", "mf-cams", "is-ibkr", "rt-sbi-forex-card"]
+all = [
+    "ba-hdfc", "ba-icici", "ba-sbi", "ba-bob", "ba-axis",
+    "cc-hdfc", "cc-icici", "cc-axis",
+    "mf-cams", "is-ibkr",
+    "rt-sbi-forex-card",
+    "md-amfi-nav", "md-nse-security", "md-nse-indices", "md-mcx-spot", "md-ishares",
+    "md-tiingo", "md-wsj", "md-msci", "md-nasdaq", "md-yahoo", "md-spdr-gold",
+]
 cli = ["clap", "anyhow", "all"]
 
 # Decoding capabilities, shared by the parsers that need them. A parser
@@ -76,6 +85,10 @@ cli = ["clap", "anyhow", "all"]
 # be gated on "can this build read a spreadsheet at all?".
 _spreadsheet = ["calamine"]
 _pdf = ["pdf-extract"]
+# An HTML <table> saved under a spreadsheet's name (MCX), and Excel's XML
+# Spreadsheet 2003 (iShares): both are text on disk, and calamine reads neither.
+_html = []
+_xmlss = ["quick-xml"]
 
 # Bank Accounts
 ba-hdfc = ["_spreadsheet", "regex"]
@@ -96,5 +109,21 @@ is-ibkr = ["csv", "chrono-tz"]
 # Reference Rates
 rt-sbi-forex-card = ["_pdf", "regex"]
 
+# Market Data: public price, NAV and index history
+md-amfi-nav = ["_spreadsheet"]
+md-nse-security = ["csv"]
+md-nse-indices = ["csv"]
+md-mcx-spot = ["_html"]
+md-ishares = ["_xmlss"]
+md-tiingo = ["csv"]
+md-wsj = ["csv"]
+md-msci = ["_spreadsheet"]
+md-nasdaq = ["_spreadsheet"]
+md-yahoo = ["csv"]
+md-spdr-gold = ["_spreadsheet"]
+
 [dev-dependencies]
 serde_json = { workspace = true }
+# Builds the spreadsheet fixtures in memory, so the tests carry invented values
+# in a publisher's layout rather than a publisher's file.
+rust_xlsxwriter = "0.90"

@@ -21,7 +21,7 @@ pub mod registry;
 
 pub use container::{sniff, Container};
 pub use probe::{Claim, Probe, Strength};
-pub use registry::{Category, Format, FormatInfo};
+pub use registry::{Area, Category, Format, FormatInfo};
 
 #[cfg(feature = "_pdf")]
 use crate::decode::DecodeError;
