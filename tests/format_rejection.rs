@@ -168,6 +168,52 @@ fn parsers() -> Vec<(&'static str, Parser)> {
             "rt-sbi-forex-card",
             erased!(xfina::reference_rates::sbi_forex_card::parse_sbi_forex_card_rates),
         ),
+        #[cfg(feature = "md-amfi-nav")]
+        (
+            "md-amfi-nav",
+            erased!(xfina::market_data::amfi::parse_amfi_nav),
+        ),
+        #[cfg(feature = "md-nse-security")]
+        (
+            "md-nse-security",
+            erased!(xfina::market_data::nse_security::parse_nse_security),
+        ),
+        #[cfg(feature = "md-nse-indices")]
+        (
+            "md-nse-indices",
+            erased!(xfina::market_data::nse_indices::parse_nse_indices),
+        ),
+        #[cfg(feature = "md-mcx-spot")]
+        (
+            "md-mcx-spot",
+            erased!(xfina::market_data::mcx::parse_mcx_spot),
+        ),
+        #[cfg(feature = "md-ishares")]
+        (
+            "md-ishares",
+            erased!(xfina::market_data::ishares::parse_ishares),
+        ),
+        #[cfg(feature = "md-tiingo")]
+        (
+            "md-tiingo",
+            erased!(xfina::market_data::tiingo::parse_tiingo),
+        ),
+        #[cfg(feature = "md-wsj")]
+        ("md-wsj", erased!(xfina::market_data::wsj::parse_wsj)),
+        #[cfg(feature = "md-msci")]
+        ("md-msci", erased!(xfina::market_data::msci::parse_msci)),
+        #[cfg(feature = "md-nasdaq")]
+        (
+            "md-nasdaq",
+            erased!(xfina::market_data::nasdaq::parse_nasdaq),
+        ),
+        #[cfg(feature = "md-yahoo")]
+        ("md-yahoo", erased!(xfina::market_data::yahoo::parse_yahoo)),
+        #[cfg(feature = "md-spdr-gold")]
+        (
+            "md-spdr-gold",
+            erased!(xfina::market_data::spdr::parse_spdr_gold),
+        ),
     ]
 }
 
