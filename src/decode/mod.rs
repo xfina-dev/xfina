@@ -11,15 +11,21 @@ use crate::detect::{sniff, Container};
 use crate::error::XfinaError;
 use crate::models::request::ParseRequest;
 
+#[cfg(feature = "_html")]
+pub mod html_table;
 #[cfg(feature = "_pdf")]
 pub mod pdf;
 #[cfg(feature = "_spreadsheet")]
 pub mod sheets;
+#[cfg(feature = "_xmlss")]
+pub mod xmlss;
 
 #[cfg(feature = "_pdf")]
 pub use pdf::{CharItem, PdfDoc};
 #[cfg(feature = "_spreadsheet")]
 pub use sheets::Sheets;
+#[cfg(feature = "_xmlss")]
+pub use xmlss::XmlSheets;
 
 /// Why a file could not be decoded.
 ///
@@ -59,6 +65,8 @@ pub struct Decoded<'a> {
     sheets: OnceCell<Result<Sheets, DecodeError>>,
     #[cfg(feature = "_pdf")]
     pdf: OnceCell<Result<PdfDoc, DecodeError>>,
+    #[cfg(feature = "_xmlss")]
+    xml_sheets: OnceCell<Result<XmlSheets, DecodeError>>,
 }
 
 impl<'a> Decoded<'a> {
@@ -73,6 +81,8 @@ impl<'a> Decoded<'a> {
             sheets: OnceCell::new(),
             #[cfg(feature = "_pdf")]
             pdf: OnceCell::new(),
+            #[cfg(feature = "_xmlss")]
+            xml_sheets: OnceCell::new(),
         }
     }
 
@@ -124,6 +134,22 @@ impl<'a> Decoded<'a> {
     pub fn sheets(&self) -> Result<&Sheets, DecodeError> {
         self.sheets
             .get_or_init(|| Sheets::open(self.bytes))
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    /// The file as an XML Spreadsheet 2003 workbook, read once.
+    #[cfg(feature = "_xmlss")]
+    pub fn xml_sheets(&self) -> Result<&XmlSheets, DecodeError> {
+        self.xml_sheets
+            .get_or_init(|| {
+                if self.container != Container::Text {
+                    return Err(DecodeError::NotThisContainer(
+                        "XML Spreadsheet is a text container".to_string(),
+                    ));
+                }
+                XmlSheets::open(self.text()?)
+            })
             .as_ref()
             .map_err(Clone::clone)
     }

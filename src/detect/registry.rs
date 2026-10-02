@@ -28,6 +28,40 @@ pub enum Category {
     /// A published reference document rather than anybody's holding: rates an
     /// institution quotes, with no holder, balance or transaction in it.
     ReferenceRates,
+    /// A published price history: an exchange's prices, a fund's NAVs or an
+    /// index's levels, one row per day.
+    MarketData,
+}
+
+/// Whose data a format carries, which decides how a caller treats it.
+///
+/// A personal statement is somebody's money: it may be locked with a
+/// password, holds names and account numbers, and renders into ReBIT. Public
+/// data is what a publisher hands to anyone -- nothing in it belongs to the
+/// person who downloaded it -- and has no ReBIT form. Surfaces keep the two
+/// apart: the web app gives each its own tab, and the CLI can list either.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Area {
+    Personal,
+    Public,
+}
+
+impl Area {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Area::Personal => "personal",
+            Area::Public => "public",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Area> {
+        match name {
+            "personal" => Some(Area::Personal),
+            "public" => Some(Area::Public),
+            _ => None,
+        }
+    }
 }
 
 impl Category {
@@ -38,6 +72,17 @@ impl Category {
             Category::MutualFunds => "mutual_funds",
             Category::IntlStocks => "intl_stocks",
             Category::ReferenceRates => "reference_rates",
+            Category::MarketData => "market_data",
+        }
+    }
+
+    pub const fn area(self) -> Area {
+        match self {
+            Category::BankAccount
+            | Category::CreditCard
+            | Category::MutualFunds
+            | Category::IntlStocks => Area::Personal,
+            Category::ReferenceRates | Category::MarketData => Area::Public,
         }
     }
 }
@@ -329,6 +374,149 @@ formats! {
         parse: crate::reference_rates::sbi_forex_card::parse_decoded,
         probe: crate::reference_rates::sbi_forex_card::probe,
     }
+    MarketAmfiNav {
+        id: "md-amfi-nav",
+        category: MarketData,
+        institution: "Association of Mutual Funds in India",
+        extension: "xlsx",
+        locked: false,
+        download_url: "https://www.amfiindia.com/net-asset-value/nav-history",
+        download_path: "Historical NAV for a period \u{2192} fund house \u{2192} scheme \u{2192} From and To, at most 5 years apart \u{2192} Go \u{2192} download the Excel file",
+        containers: [Zip],
+        priority: 60,
+        parse: crate::market_data::amfi::parse_decoded,
+        probe: crate::market_data::amfi::probe,
+    }
+    MarketNseSecurity {
+        id: "md-nse-security",
+        category: MarketData,
+        institution: "National Stock Exchange of India",
+        extension: "csv",
+        locked: false,
+        download_url: "https://www.nseindia.com/report-detail/eq_security",
+        download_path: "Security-wise price and volume data \u{2192} symbol and the EQ series \u{2192} From and To, at most 5 years apart \u{2192} Download (.csv)",
+        containers: [Text],
+        priority: 61,
+        parse: crate::market_data::nse_security::parse_decoded,
+        probe: crate::market_data::nse_security::probe,
+    }
+    MarketNseIndices {
+        id: "md-nse-indices",
+        category: MarketData,
+        institution: "NSE Indices",
+        extension: "csv",
+        locked: false,
+        download_url: "https://www.niftyindices.com/reports/historical-data",
+        download_path: "Total returns Index Values (or Historical Index Data for a debt index) \u{2192} the index \u{2192} From and To, one year at a time \u{2192} Submit \u{2192} csv",
+        containers: [Text],
+        priority: 62,
+        parse: crate::market_data::nse_indices::parse_decoded,
+        probe: crate::market_data::nse_indices::probe,
+    }
+    MarketMcxSpot {
+        id: "md-mcx-spot",
+        category: MarketData,
+        institution: "Multi Commodity Exchange of India",
+        extension: "xls",
+        locked: false,
+        download_url: "https://www.mcxindia.com/market-data/spot-market-price",
+        download_path: "Archives \u{2192} Commodity GOLD, Location AHMEDABAD \u{2192} the widest date range \u{2192} Show \u{2192} the page's Excel export",
+        containers: [Text],
+        priority: 63,
+        parse: crate::market_data::mcx::parse_decoded,
+        probe: crate::market_data::mcx::probe,
+    }
+    MarketIshares {
+        id: "md-ishares",
+        category: MarketData,
+        institution: "BlackRock iShares",
+        extension: "xls",
+        locked: false,
+        download_url: "https://www.ishares.com/",
+        download_path: "The fund's page \u{2192} Data Download; the Historical (US funds) or Historical NAVs (UCITS funds) sheet is the full daily history",
+        containers: [Text],
+        priority: 64,
+        parse: crate::market_data::ishares::parse_decoded,
+        probe: crate::market_data::ishares::probe,
+    }
+    MarketTiingo {
+        id: "md-tiingo",
+        category: MarketData,
+        institution: "Tiingo",
+        extension: "csv",
+        locked: false,
+        download_url: "https://www.tiingo.com/",
+        download_path: "Free account \u{2192} API token \u{2192} api.tiingo.com/tiingo/daily/<ticker>/prices?startDate=1970-01-01&format=csv&token=<token>, saved as <ticker>.csv",
+        containers: [Text],
+        priority: 65,
+        parse: crate::market_data::tiingo::parse_decoded,
+        probe: crate::market_data::tiingo::probe,
+    }
+    MarketWsj {
+        id: "md-wsj",
+        category: MarketData,
+        institution: "The Wall Street Journal",
+        extension: "csv",
+        locked: false,
+        download_url: "https://www.wsj.com/market-data",
+        download_path: "The fund's quote page \u{2192} Historical Prices \u{2192} date range \u{2192} Download a spreadsheet",
+        containers: [Text],
+        priority: 66,
+        parse: crate::market_data::wsj::parse_decoded,
+        probe: crate::market_data::wsj::probe,
+    }
+    MarketMsci {
+        id: "md-msci",
+        category: MarketData,
+        institution: "MSCI",
+        extension: "xlsx",
+        locked: false,
+        download_url: "https://www.msci.com/indexes",
+        download_path: "The index page \u{2192} Performance \u{2192} Cumulative performance, Full history, Monthly \u{2192} the download icon next to Compare",
+        containers: [Zip],
+        priority: 67,
+        parse: crate::market_data::msci::parse_decoded,
+        probe: crate::market_data::msci::probe,
+    }
+    MarketNasdaq {
+        id: "md-nasdaq",
+        category: MarketData,
+        institution: "Nasdaq",
+        extension: "xlsx",
+        locked: false,
+        download_url: "https://indexes.nasdaq.com/",
+        download_path: "The index's History tab \u{2192} Performance: All \u{2192} Download",
+        containers: [Zip],
+        priority: 68,
+        parse: crate::market_data::nasdaq::parse_decoded,
+        probe: crate::market_data::nasdaq::probe,
+    }
+    MarketYahoo {
+        id: "md-yahoo",
+        category: MarketData,
+        institution: "Yahoo Finance",
+        extension: "csv",
+        locked: false,
+        download_url: "https://finance.yahoo.com/",
+        download_path: "No download button: the yfinance CSV (history with actions) or Yahoo's classic historical-data CSV",
+        containers: [Text],
+        priority: 69,
+        parse: crate::market_data::yahoo::parse_decoded,
+        probe: crate::market_data::yahoo::probe,
+    }
+    MarketSpdrGold {
+        id: "md-spdr-gold",
+        category: MarketData,
+        institution: "SPDR Gold Shares",
+        extension: "xlsx",
+        locked: false,
+        download_url: "https://www.spdrgoldshares.com/",
+        download_path: "GLD \u{2192} Historical Data \u{2192} Download; the full daily history from launch",
+        containers: [Zip],
+        priority: 70,
+        parse: crate::market_data::spdr::parse_decoded,
+        probe: crate::market_data::spdr::probe,
+    }
 }
 
 /// The wire value of a `Format` is always its id, which is also its feature
@@ -358,6 +546,8 @@ impl std::fmt::Display for Format {
 #[derive(Debug, Clone, Serialize)]
 pub struct FormatInfo {
     pub id: &'static str,
+    /// Personal statements or public data; see [`Area`].
+    pub area: Area,
     pub category: Category,
     pub institution: &'static str,
     /// The extension the institution puts on the file, for callers filtering
@@ -378,6 +568,7 @@ impl From<Format> for FormatInfo {
     fn from(f: Format) -> Self {
         FormatInfo {
             id: f.id(),
+            area: f.category().area(),
             category: f.category(),
             institution: f.institution(),
             extension: f.extension(),
@@ -457,7 +648,9 @@ mod tests {
             let plausible = match f.extension() {
                 "pdf" => &[Container::Pdf][..],
                 "csv" | "txt" => &[Container::Text][..],
-                "xls" => &[Container::Ole2, Container::Zip][..],
+                // MCX's export is an HTML table and iShares' is Excel's XML
+                // Spreadsheet 2003: both named .xls, both text on disk.
+                "xls" => &[Container::Ole2, Container::Zip, Container::Text][..],
                 "xlsx" => &[Container::Zip][..],
                 other => panic!("{} declares an unknown extension '{}'", f, other),
             };
@@ -501,6 +694,27 @@ mod tests {
                 "{} is marked password protected but is not a PDF",
                 f
             );
+        }
+    }
+
+    #[test]
+    fn only_published_documents_are_public() {
+        // The area decides whether a surface offers a password prompt and a
+        // ReBIT export, so a statement must never be filed as public data.
+        for f in Format::ALL {
+            let public = matches!(
+                f.category(),
+                Category::ReferenceRates | Category::MarketData
+            );
+            assert_eq!(
+                f.category().area() == Area::Public,
+                public,
+                "{} is in the wrong area",
+                f
+            );
+            if public {
+                assert!(!f.is_password_protected(), "{} is public but locked", f);
+            }
         }
     }
 

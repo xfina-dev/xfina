@@ -23,7 +23,7 @@ npm install xfina-wasm
 ## Quick Start (Browser / Vite)
 
 ```javascript
-import init, { parse, detect, formats, version } from "xfina-wasm";
+import init, { parse, detect, formats, version, seriesCoverage, seriesCsv } from "xfina-wasm";
 
 await init();
 
@@ -44,6 +44,7 @@ if (result.error) {
   }
 } else {
   result.format;       // "ba-hdfc"
+  result.area;         // "personal", or "public" for rate sheets and price histories
   result.category;     // "bank_account"
   result.institution;  // "HDFC Bank"
   result.detection;    // how it was identified, plus the file's own metadata
@@ -52,14 +53,16 @@ if (result.error) {
 }
 ```
 
-## The four functions
+## The functions
 
 | Function | Purpose |
 |---|---|
 | `parse(bytes, options)` | Identify and parse a statement. Returns the envelope, or `{ error }`. |
 | `detect(bytes, options)` | Identify a statement without parsing it. |
-| `formats()` | Every format this build knows, with `id`, `category`, `institution`, `containers` and `enabled`. Build your UI from this rather than a hardcoded list. |
+| `formats()` | Every format this build knows, with `id`, `area`, `category`, `institution`, `containers` and `enabled`. Build your UI from this rather than a hardcoded list. |
 | `version()` | The version of the parsers actually running. |
+| `seriesCoverage(data)` | For the `data` of a price history parse: first and last date, rows with a value, and gaps. Of that one file. |
+| `seriesCsv(data)` | The same `data` as CSV, in Tiingo's column layout. |
 
 **Error kinds:** `password_required`, `incorrect_password`, `unrecognized_format`,
 `invalid_format`, `parse_error`, `unsupported`, `format_not_enabled`, `io`.

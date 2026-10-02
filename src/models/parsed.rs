@@ -7,6 +7,7 @@ use crate::models::account::Account;
 
 use crate::models::rates::RateSheet;
 use crate::models::schema::Schema;
+use crate::models::series::PriceSeries;
 use crate::models::{CreditCardAccount, DepositAccount, EquityAccount, MutualFundsAccount};
 
 /// The result of reading a file, whatever kind of document it turned out to be.
@@ -14,12 +15,14 @@ use crate::models::{CreditCardAccount, DepositAccount, EquityAccount, MutualFund
 /// Every format used to produce an [`Account`], and most still do. A rate
 /// sheet is not an account, a holding or a transaction, so rather than give it
 /// a hollow account to live in -- an account with no holder, no balance and no
-/// number -- it gets its own variant and the registry stays one table.
+/// number -- it gets its own variant and the registry stays one table. A
+/// published price history is the same kind of thing, and gets the same.
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum Parsed {
     Account(Account),
     Rates(RateSheet),
+    Series(PriceSeries),
 }
 
 impl Parsed {
@@ -35,6 +38,7 @@ impl Parsed {
         match self {
             Parsed::Account(account) => Ok(account.to_json(schema)),
             Parsed::Rates(sheet) => sheet.to_json(schema),
+            Parsed::Series(series) => series.to_json(schema),
         }
     }
 
@@ -42,7 +46,7 @@ impl Parsed {
     pub fn account(&self) -> Option<&Account> {
         match self {
             Parsed::Account(account) => Some(account),
-            Parsed::Rates(_) => None,
+            Parsed::Rates(_) | Parsed::Series(_) => None,
         }
     }
 
@@ -50,7 +54,15 @@ impl Parsed {
     pub fn rates(&self) -> Option<&RateSheet> {
         match self {
             Parsed::Rates(sheet) => Some(sheet),
-            Parsed::Account(_) => None,
+            Parsed::Account(_) | Parsed::Series(_) => None,
+        }
+    }
+
+    /// The parsed price series, for a caller that only handles market data.
+    pub fn series(&self) -> Option<&PriceSeries> {
+        match self {
+            Parsed::Series(series) => Some(series),
+            Parsed::Account(_) | Parsed::Rates(_) => None,
         }
     }
 }
@@ -64,6 +76,12 @@ impl From<Account> for Parsed {
 impl From<RateSheet> for Parsed {
     fn from(r: RateSheet) -> Self {
         Parsed::Rates(r)
+    }
+}
+
+impl From<PriceSeries> for Parsed {
+    fn from(s: PriceSeries) -> Self {
+        Parsed::Series(s)
     }
 }
 
