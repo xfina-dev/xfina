@@ -273,18 +273,21 @@ fn columns(page: &[Cell]) -> Result<Vec<Column>, XfinaError> {
 
     // Every rate the sheet has ever quoted names a side of the trade in a few
     // words, whatever the column has been called over the years. A heading
-    // that does not, or one far longer than any of them, means
-    // the heading block was not read as separate headings -- some sheets are
-    // published with the wrong advance widths, which draws two headings across
-    // each other so that their letters interleave and no reading can separate
-    // them. Stopping here says that, where carrying on would attach figures to
-    // a heading assembled out of two.
+    // that does not, or one far longer than any of them, is two headings read
+    // as one.
+    //
+    // That happens on sheets set in a font whose glyph widths this reader
+    // cannot measure. It advances every glyph by the same amount instead, so
+    // the positions it reports drift and separate headings come out on top of
+    // each other. The sheet is fine and other readers have no trouble with it;
+    // the measurement is ours. Stopping here is honest about that, where
+    // carrying on would attach figures to a heading assembled out of two.
     if let Some(odd) = columns.iter().find(|c| {
         let words = c.key.split('_').count();
         !(c.key.ends_with("_buy") || c.key.ends_with("_sell")) || words > HEADING_WORDS
     }) {
         return Err(XfinaError::ParseError(format!(
-            "SBI forex card rate sheet has an unreadable column heading ('{}')",
+            "Could not place the column headings on this SBI forex card rate sheet; read '{}' as one heading",
             odd.key
         )));
     }

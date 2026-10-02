@@ -1712,53 +1712,23 @@ const camsGroupedAssets = computed(() => {
       
       <!-- Equity Statement Results Table -->
       <!-- A published rate card, which is not anybody's account: no holder, no
-           balance, no transactions. It gets its own pane rather than being bent
-           into the statement header the other four share. -->
+           balance, no transactions. It still reads through the header the other
+           four share, with the sheet itself where a holder would be, so the
+           pile looks the same whatever was dropped into it.
+           No validation status is passed: a rate card has nothing to reconcile,
+           and a green tick would be claiming a check that never ran. -->
       <div v-if="rateSheet" class="space-y-6">
-        <Card class="bg-card text-card-foreground shadow-sm">
-          <CardHeader class="pb-2 border-b mb-3">
-            <CardTitle class="text-sm text-muted-foreground font-semibold uppercase tracking-wider">
-              {{ result?.institution }} &mdash; Forex Card Rates
-            </CardTitle>
-            <CardDescription class="text-xs">
-              Rates quoted against the rupee, for the reference band. Not an account statement.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div class="flex flex-col">
-                <span class="text-xs text-muted-foreground mb-1">Date</span>
-                <span class="font-medium font-mono text-xl text-foreground">{{ formatDate(rateSheet.date) }}</span>
-              </div>
-              <div class="flex flex-col" v-if="rateSheet.publishedAt">
-                <span class="text-xs text-muted-foreground mb-1">Published</span>
-                <span class="font-medium font-mono text-xl">{{ formatDateTime(rateSheet.publishedAt) }}</span>
-              </div>
-              <div class="flex flex-col">
-                <span class="text-xs text-muted-foreground mb-1">Currencies</span>
-                <span class="font-medium font-mono text-xl">{{ rateSheet.currencies?.length || 0 }}</span>
-              </div>
-              <div class="flex flex-col">
-                <span class="text-xs text-muted-foreground mb-1">Rate Columns</span>
-                <span class="font-medium font-mono text-xl">{{ rateSheet.columns?.length || 0 }}</span>
-              </div>
-            </div>
-            <!-- Said out loud rather than left in the data: these rates were
-                 matched to their headings by order because the sheet was
-                 published with nothing lining up under them. -->
-            <div
-              v-if="rateSheet.figuresMatchedByOrder"
-              class="mt-4 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground"
-            >
-              <AlertTriangle class="h-4 w-4 shrink-0 text-amber-500" />
-              <span>
-                This sheet was published with its table collapsed, so no figure sat under a
-                heading. Each rate was matched to the heading in the same position, which was
-                only possible because every row accounted for every heading exactly once.
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatementHeader
+          customerName="Forex Card Rates"
+          statementType="Reference Rates"
+          :institutionName="result?.institution || ''"
+          :statementDetails="[
+            { label: 'Date', value: formatDate(rateSheet.date) },
+            ...(rateSheet.publishedAt ? [{ label: 'Published', value: formatDateTime(rateSheet.publishedAt) }] : []),
+            { label: 'Currencies', value: rateSheet.currencies?.length || 0 },
+            { label: 'Rate Columns', value: rateSheet.columns?.length || 0 }
+          ]"
+        />
 
         <Card class="bg-card text-card-foreground shadow-sm">
           <CardHeader class="pb-2 border-b mb-3">
