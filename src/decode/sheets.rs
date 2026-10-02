@@ -32,6 +32,15 @@ impl Sheets {
             .ok_or_else(|| DecodeError::NotThisContainer("No sheets found in workbook".to_string()))
     }
 
+    /// The sheet with this exact name, for workbooks that do not put their
+    /// data first.
+    pub fn get(&self, name: &str) -> Option<&Range<Data>> {
+        self.sheets
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, range)| range)
+    }
+
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.sheets.iter().map(|(name, _)| name.as_str())
     }

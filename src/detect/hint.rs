@@ -30,6 +30,23 @@ const PATTERNS: &[(&str, Format)] = &[
     ("cams", Format::MutualFundsCams),
     ("axis bank statement", Format::BankAxis),
     ("forex_card_rates", Format::RatesSbiForexCard),
+    // Market data. AMFI's own name is NAV_<from>_to_<to>.xlsx; NSE's archive
+    // ends in -EQ-N.csv; the bookmarklets name Tiingo and WSJ files
+    // <TICKER>_<from>_to_<to>.<source>.csv after the fact.
+    ("nav_", Format::MarketAmfiNav),
+    ("-eq-n.csv", Format::MarketNseSecurity),
+    ("quote-equity-", Format::MarketNseSecurity),
+    ("_historical_tr_", Format::MarketNseIndices),
+    ("_historical_pr_", Format::MarketNseIndices),
+    ("spotmarket", Format::MarketMcxSpot),
+    ("_fund.xls", Format::MarketIshares),
+    (".tiingo.", Format::MarketTiingo),
+    (".wsj.", Format::MarketWsj),
+    ("historicalprices", Format::MarketWsj),
+    ("msci", Format::MarketMsci),
+    ("eodhist_", Format::MarketNasdaq),
+    (".yfinance.", Format::MarketYahoo),
+    ("gld_archive", Format::MarketSpdrGold),
 ];
 
 /// IBKR names its activity statements after the account and the period:

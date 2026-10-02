@@ -49,6 +49,26 @@ By building Xfina in **Rust**, we achieve:
 
 *Note: Bank Account parsers have not been tested with Joint Accounts.*
 
+### Public data: price, NAV and index history
+
+Formats fall into two areas. **Personal statements** (above, except the rate sheet) describe an account somebody holds. **Public data** is what a publisher hands to anyone: the SBI rate sheet and the price histories below. Each history parses into one `PriceSeries` -- a superset row whose fields (`close`, `nav`, `totalReturn`, `netTotalReturn`, the `adj*` twins, `dividend`, `splitFactor`, …) a file fills as far as it prints them, with anything else kept under the publisher's own heading. ReBIT has no form for a price history.
+
+Each file is read on its own. A history that arrives in pieces -- a year of NSE index levels per download, five years of AMFI NAVs -- comes back as one series per piece; putting pieces together is left to the caller.
+
+| Publisher | Format | Series | Notes |
+|---|---|---|---|
+| AMFI | XLSX | Mutual fund NAV | NAV history export; the period it prints is checked against its rows |
+| NSE | CSV | Exchange price | Security-wise archive and the quote page download |
+| NSE Indices | CSV | Total return / net total return, or price index | Total returns index values; historical index data for debt indices |
+| MCX | XLS (HTML) | Spot price | Every intraday poll kept with its time |
+| BlackRock iShares | XLS (XML Spreadsheet 2003) | NAV | US funds with each dividend on its ex-date, checked against the Distributions sheet; UCITS and Swiss funds |
+| Tiingo | CSV | Price, adjusted price, dividends, splits | A mutual fund's close is read as its NAV |
+| The Wall Street Journal | CSV | Price | Historical prices download |
+| MSCI | XLSX | Net / gross total return, or price index | Index level export |
+| Nasdaq | XLSX | Price index, or total return (XNDX) | End-of-day history |
+| Yahoo Finance | CSV | Price, with dividends and splits | yfinance output and Yahoo's classic table; closes already split-adjusted |
+| SPDR Gold Shares | XLSX | Market close and NAV | GLD historical archive |
+
 ---
 
 ## Architecture
@@ -134,24 +154,26 @@ cargo install xfina --features cli
 ### Usage
 
 ```bash
-xfina <CATEGORY> <INSTITUTION> <FILE> [OPTIONS]
+xfina parse <FILE> [--as <FORMAT>] [--schema xfina|rebit] [--password <PWD>] [--output <PATH>] [--csv]
+xfina detect <FILE>
+xfina formats [--area personal|public]
 ```
 
-**Options:**
-- `-p, --password <PWD>`: Password to unlock encrypted PDFs
-- `-o, --output <DIR>`: Output file path. Defaults to `<input_file_stem>.json` in the same directory.
-- `-f, --format <FORMAT>`: JSON format to output. Either `rebit` or `xfina` (default).
+The format is worked out from the file's content; `--as` pins one instead.
 
 **Examples:**
 ```bash
 # Parse a bank statement
-xfina bank-account hdfc statement.xls
+xfina parse statement.xls
 
-# Parse a password-protected mutual fund statement
-xfina mutual-fund cams portfolio.pdf --password "mysecret"
+# Parse a password-protected mutual fund statement into strict ReBIT
+xfina parse portfolio.pdf --password "mysecret" --schema rebit
 
-# Parse a credit card statement and export to a specific location in strict ReBIT format
-xfina credit-card icici statement.xls --output ./exports/january.json --format rebit
+# Write a price history as CSV in Tiingo's column layout
+xfina parse SPY.csv --csv
+
+# List the public data formats and where to download each
+xfina formats --area public
 ```
 
 ---
@@ -196,6 +218,7 @@ The [`web/`](./web) directory contains a **Vue 3 + Vite** frontend that uses the
 - 🔒 **100% client-side** — no server, no uploads
 - ⚡ **Rust/WASM performance** — parsing in milliseconds
 - 📊 **Rich UI** — statement header, account summary, transaction table
+- 📈 **Public data tab** — price histories grouped by dataset, with each file's coverage, gaps and checks, and CSV/JSON downloads
 - 🌙 **Dark mode** support
 - 🏷️ **ReBIT compliance** — Direct JSON serialization into ReBIT structures
 

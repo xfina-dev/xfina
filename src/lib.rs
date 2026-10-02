@@ -37,11 +37,17 @@
 //! - [`mutual_funds`]: Parsers for mutual fund statements (CAMS CAS)
 //! - [`intl_stocks`]: Parsers for international broker statements (IBKR)
 //! - [`reference_rates`]: Parsers for published rate sheets (SBI forex card rates)
+//! - [`market_data`]: Parsers for published price, NAV and index history
 //!
-//! Most formats describe an account somebody holds, and those render into
-//! either schema. A reference document does not, so [`Statement::to_json`]
+//! Formats fall into two [`Area`]s. **Personal** statements describe an
+//! account somebody holds, and render into either schema. **Public** data --
+//! a rate sheet, a price history -- does not, so [`Statement::to_json`]
 //! returns a `Result`: [`Schema::Rebit`] has no term for a price an
 //! institution published and says so rather than returning an empty envelope.
+//!
+//! Each file parses on its own. A price history split across several
+//! downloads comes back as several series; putting them back together is
+//! computation over parsed data, not parsing, and is not done here.
 
 pub mod mutual_funds {
     #[cfg(feature = "mf-cams")]
@@ -61,6 +67,8 @@ pub mod reference_rates {
     #[cfg(feature = "rt-sbi-forex-card")]
     pub mod sbi_forex_card;
 }
+
+pub mod market_data;
 
 pub mod credit_cards {
     #[cfg(feature = "cc-axis")]
@@ -94,7 +102,7 @@ pub mod detect;
 pub mod error;
 pub mod models;
 
-pub use detect::{detect, detect_format, formats, Category, Format, FormatInfo};
+pub use detect::{detect, detect_format, formats, Area, Category, Format, FormatInfo};
 pub use models::{ParseRequest, Parsed, Schema, Statement};
 
 /// This crate's version, so a caller can report which parsers it is running.

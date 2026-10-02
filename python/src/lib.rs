@@ -1,4 +1,5 @@
-//! The Python interface: four functions, whatever the statement is.
+//! The Python interface: four functions, whatever the statement is, and two
+//! for a parsed price series -- what it covers, and it as CSV.
 //!
 //! Callers used to pick one of ten functions by working out the category and
 //! institution themselves. They hand over bytes now, and `parse` says what the
@@ -7,11 +8,11 @@
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::*;
-use pythonize::pythonize;
+use pythonize::{depythonize_bound, pythonize};
 
 use ::xfina::detect::Format;
 use ::xfina::error::XfinaError;
-use ::xfina::models::{ParseRequest, Schema};
+use ::xfina::models::{ParseRequest, PriceSeries, Schema};
 
 create_exception!(
     xfina,
@@ -99,6 +100,29 @@ fn detect(
     }
 }
 
+/// A parsed price series as CSV, in Tiingo's column layout.
+///
+/// Takes the `data` dict of a market data parse, as `parse` returned it, so
+/// the file is not read twice.
+#[pyfunction]
+fn series_csv(data: &Bound<'_, PyAny>) -> PyResult<String> {
+    let value: serde_json::Value = depythonize_bound(data.clone())
+        .map_err(|e| PyValueError::new_err(format!("Invalid series: {}", e)))?;
+    PriceSeries::from_json(value)
+        .map(|series| series.to_csv())
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
+/// What a parsed price series covers: first and last date, rows with a
+/// value, and gaps longer than its frequency explains. Of that one file only.
+#[pyfunction]
+fn series_coverage(py: Python, data: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    let value: serde_json::Value = depythonize_bound(data.clone())
+        .map_err(|e| PyValueError::new_err(format!("Invalid series: {}", e)))?;
+    let series = PriceSeries::from_json(value).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    to_py(py, serde_json::json!(series.coverage()))
+}
+
 /// Every format this build knows, with whether it is compiled in.
 #[pyfunction]
 fn formats(py: Python) -> PyResult<PyObject> {
@@ -115,6 +139,8 @@ fn xfina(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(detect, m)?)?;
     m.add_function(wrap_pyfunction!(formats, m)?)?;
+    m.add_function(wrap_pyfunction!(series_csv, m)?)?;
+    m.add_function(wrap_pyfunction!(series_coverage, m)?)?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add(
         "XfinaParseError",

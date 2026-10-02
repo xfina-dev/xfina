@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::detect::registry::{Category, Format};
+use crate::detect::registry::{Area, Category, Format};
 use crate::detect::{Container, Strength};
 use crate::models::parsed::Parsed;
 use crate::models::request::ParseRequest;
@@ -71,7 +71,7 @@ pub struct Detection {
 pub struct Statement {
     pub format: Format,
     /// What the parser produced -- an account for most formats, a rate sheet
-    /// for a published reference document.
+    /// for a published reference document, a price series for market data.
     pub data: Parsed,
     pub validation: ValidationReport,
     pub detection: Detection,
@@ -82,6 +82,11 @@ impl Statement {
         self.format.category()
     }
 
+    /// Personal statement or public data.
+    pub fn area(&self) -> Area {
+        self.format.category().area()
+    }
+
     pub fn institution(&self) -> &'static str {
         self.format.institution()
     }
@@ -90,8 +95,8 @@ impl Statement {
     ///
     /// `data` and `validation` keep the exact shape the per-parser functions
     /// have always produced, so this is additive for anything already reading
-    /// them; `format`, `category`, `institution` and `detection` are what a
-    /// caller no longer has to work out for itself.
+    /// them; `format`, `area`, `category`, `institution` and `detection` are
+    /// what a caller no longer has to work out for itself.
     /// # Errors
     ///
     /// [`crate::error::XfinaError::SchemaUnsupported`] when the schema cannot
@@ -102,6 +107,7 @@ impl Statement {
         Ok(json!({
             "schema": schema.as_str(),
             "format": self.format.id(),
+            "area": self.area().as_str(),
             "category": self.format.category().as_str(),
             "institution": self.format.institution(),
             "detection": self.detection,
