@@ -1,0 +1,26 @@
+name: Share how you used it
+description: Tell us what you used Xfina for. It shapes what we build next.
+title: "[Story] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you! Hearing how it is used is the best feedback there is. Issues here are public: please leave out your own names, numbers and amounts.
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: The web app, the CLI, or the Rust, npm or Python library
+    validations:
+      required: true
+  - type: textarea
+    id: story
+    attributes:
+      label: What did you use it for?
+      description: The question you had, and what you found.
+    validations:
+      required: true
+  - type: textarea
+    id: better
+    attributes:
+      label: What would have made it better?

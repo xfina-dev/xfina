@@ -191,12 +191,14 @@ fn main() -> Result<(), xfina::error::XfinaError> {
 
 The [`web/`](./web) directory contains a **Vue 3 + Vite** frontend that uses the WASM module to parse files directly in the browser.
 
+It is built on [xfina-ui](https://github.com/xfina-dev/xfina-ui), the theme and components every xfina.dev site shares, from npm and pinned to an exact version in `web/package.json`. The header, the feedback card, the family cards, the shadcn-vue components (buttons, cards, tables, selects, dialogs, tooltips, badges) and every colour, light and dark, come from there; the web app defines none of its own. If it needs a component xfina-ui lacks, the component is added to xfina-ui, for every site. The web app keeps only its own views and `PrivacyDialog.vue`, the consent dialog for its anonymous usage statistics, which the header's privacy button opens.
+
 ### Features
 
 - 🔒 **100% client-side** — no server, no uploads
 - ⚡ **Rust/WASM performance** — parsing in milliseconds
 - 📊 **Rich UI** — statement header, account summary, transaction table
-- 🌙 **Dark mode** support
+- 🌙 **Light and dark mode**, shared with every xfina.dev site
 - 🏷️ **ReBIT compliance** — Direct JSON serialization into ReBIT structures
 
 ### Running Locally

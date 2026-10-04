@@ -1,0 +1,34 @@
+name: Report a problem
+description: Xfina didn't read a file, or a figure it read looks wrong.
+title: "[Problem] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Issues here are public: **never attach a statement**, and leave out names, account and card numbers, amounts and transaction descriptions. Say which institution and kind of statement it was, and describe what went wrong in your own words.
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: The web app, the CLI, or the Rust, npm or Python library
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: The institution and kind of statement (for example, an HDFC Bank account statement as XLS), what you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to see it
+      description: The steps that lead to it, if you know them. A screenshot helps, once every name, number and amount in it is hidden.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Page and browser
+      description: Filled in for you when you come from xfina.dev.
+      render: text

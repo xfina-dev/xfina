@@ -43,7 +43,7 @@ commit message is permanent, and a published tag is worse.
 
 ## Architecture Overview
 - **Backend (Rust + WASM):** Financial statements (PDFs, XLS, etc.) are parsed securely entirely within the browser using Rust compiled to WebAssembly. Parsers are split into domain-specific packages (`bank-accounts/`, `credit-cards/`, `mutual-funds/`, `intl-stocks/`).
-- **Frontend (Vue 3 + Vite):** The user interface is built with Vue 3, Tailwind CSS, and `shadcn-vue` style components. It takes the JSON output from the WASM parsers and renders standardized views.
+- **Frontend (Vue 3 + Vite):** The user interface is built with Vue 3 and Tailwind CSS on [xfina-ui](https://github.com/xfina-dev/xfina-ui), which supplies every component and colour; `web/` defines none of its own, and a missing component is added to xfina-ui. It takes the JSON output from the WASM parsers and renders standardized views.
 - **Models (`xfina-models`):** Shared Rust data structures used to serialize data. They adhere closely to the Sahamati Account Aggregator (AA) schema standards, with our own project-specific extensions nested inside `xfina` objects (e.g. `XfinaCreditCardAccount`).
 
 ## Build & Run Instructions
@@ -84,5 +84,5 @@ commit message is permanent, and a published tag is worse.
 4. **Data Fallbacks & Safety:** Parsers should fail gracefully. Try to derive information when missing (e.g. deriving missing transaction years from the statement date).
 
 ## UI/UX Rules
-- **Color & Styling:** Maintain consistency in financial coloring (green for deposits/payments, default colors for neutral balances). Use the predefined Tailwind semantic colors (e.g. `text-muted-foreground`, `text-primary`).
+- **Color & Styling:** Maintain consistency in financial coloring (`text-status-good-text` for deposits/payments and gains, `text-status-critical-text` for losses, `text-foreground` for neutral balances). Use only xfina-ui's tokens (e.g. `text-muted-foreground`, `text-primary-text` for blue text, `bg-status-warning`), never a raw Tailwind palette colour such as `text-emerald-500`.
 - Ensure UI bindings exactly match the serialized JSON paths (e.g., watch out for `camelCase` conversions like `institution_name` becoming `institutionName` in JS).

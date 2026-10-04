@@ -1,0 +1,24 @@
+name: Request a feature
+description: A statement Xfina should read, or something it should do.
+title: "[Idea] "
+labels: [enhancement]
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: The web app, the CLI, or the Rust, npm or Python library
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: For a new statement, the institution, the kind of statement, and the file type it downloads as.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What would it help you do?
+      description: The question you're trying to answer helps more than the exact feature.

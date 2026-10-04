@@ -1,47 +1,21 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { useDark, useToggle } from '@vueuse/core';
 import init, { parse, formats, version as wasmVersion } from 'xfina-wasm';
-import { Sun, Moon, Github, HelpCircle, ChevronDown, Loader2, ArrowUp, ArrowDown, GitCommit, CheckCircle2, AlertTriangle, XCircle, MinusCircle, Activity, Upload, Lock, X, ExternalLink } from 'lucide-vue-next';
-
-// Shadcn components
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getStoredAnalyticsLevel, setStoredAnalyticsLevel, updateAnalyticsState, trackParserEvent, LEVEL_OFF, LEVEL_ANONYMOUS } from '@/lib/analytics.js';
+import { HelpCircle, Loader2, ArrowUp, ArrowDown, GitCommit, CheckCircle2, AlertTriangle, XCircle, MinusCircle, Upload, Lock, X, ExternalLink, ChevronDown } from 'lucide-vue-next';
+import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger, Badge, Button,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, FeedbackCard,
+  Input, Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Tooltip, TooltipContent, TooltipTrigger,
+  XfinaFamily, XfinaHeader, XfinaProvider,
+} from 'xfina-ui';
+import { trackParserEvent } from '@/lib/analytics.js';
 import StatementHeader from '@/components/StatementHeader.vue';
+import PrivacyDialog from '@/components/PrivacyDialog.vue';
 
-const analyticsLevel = ref(getStoredAnalyticsLevel());
-
-const setAnalyticsLevel = (level) => {
-    analyticsLevel.value = level;
-    setStoredAnalyticsLevel(level);
-};
-
-const isDark = useDark();
-const toggleDark = () => {
-    isDark.value = !isDark.value;
-    if (isDark.value) {
-        document.documentElement.classList.add('dark');
-    } else {
-        document.documentElement.classList.remove('dark');
-    }
-};
-
-onMounted(() => {
-    if (isDark.value) {
-        document.documentElement.classList.add('dark');
-    } else {
-        document.documentElement.classList.remove('dark');
-    }
-    updateAnalyticsState(analyticsLevel.value);
-});
+const privacyOpen = ref(false);
 
 const wasmLoaded = ref(false);
 const error = ref(null);
@@ -157,7 +131,9 @@ onMounted(async () => {
     // would otherwise ask for /0.4/versions.json, which does not exist.
     try {
         const res = await fetch("/versions.json");
-        if (res.ok) {
+        // Vite's dev server answers a missing file with index.html, so check
+        // it is JSON before reading it as such.
+        if (res.ok && res.headers.get('content-type')?.includes('json')) {
             versionsData.value = await res.json();
         }
     } catch (e) {
@@ -595,246 +571,56 @@ const camsGroupedAssets = computed(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground p-8 font-sans transition-colors duration-200">
-    <div class="max-w-6xl mx-auto space-y-8">
-      
-      <!-- Header -->
-      <div class="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-        <div class="flex items-start gap-5">
-          <a href="." class="hover:opacity-80 transition-opacity flex-shrink-0 cursor-pointer">
-            <img src="/favicon.svg" alt="Xfina Logo" class="w-16 h-16" />
-          </a>
-          <div class="space-y-2">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-              <a href="." class="hover:text-primary transition-colors cursor-pointer">
-                <h1 class="text-3xl font-bold tracking-tight">Xfina</h1>
-              </a>
-              <div class="flex items-center">
-                <Select :key="versionsData ? 'loaded' : 'loading'" :modelValue="selectedDropdownValue" @update:modelValue="onVersionChange">
-                  <SelectTrigger class="w-[140px] h-9 border-border bg-background shadow-sm rounded-r-none focus:z-10 focus:ring-1">
-                    <SelectValue placeholder="Version" />
-                  </SelectTrigger>
-                  <SelectContent v-if="versionsData">
-                    <SelectGroup>
-                      <SelectItem 
-                        v-if="latestSeries" 
-                        :value="latestSeries.minor"
-                      >
-                        {{ latestSeries.minor }}.x (Latest)
-                      </SelectItem>
-                      <SelectItem 
-                        v-for="series in pastSeries" 
-                        :key="series.minor" 
-                        :value="series.minor"
-                      >
-                        {{ series.minor }}.x
-                      </SelectItem>
-                      <SelectItem 
-                        v-if="unreleasedSeries" 
-                        :value="unreleasedSeries.minor"
-                      >
-                        Unreleased
-                      </SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <a v-if="shortCommitHash" 
-                   :href="`https://github.com/xfina-dev/xfina/commit/${cleanCommitHash}`" 
-                   target="_blank" 
-                   rel="noopener noreferrer" 
-                   class="no-underline relative z-0">
-                   <Button variant="outline" class="flex items-center gap-1.5 h-9 px-3 text-xs font-mono text-muted-foreground hover:text-foreground shadow-sm rounded-l-none border-l-0">
-                     <GitCommit class="w-3.5 h-3.5" />
-                     {{ shortCommitHash }}
-                   </Button>
-                </a>
-              </div>
-            </div>
-            <p class="text-muted-foreground mt-2 leading-relaxed">
-              e<strong>X</strong>tract <strong>fina</strong>ncial statements entirely in your browser with Rust/Wasm<br />
-              Fast, private, zero-setup, and without uploading your files to any server.
-            </p>
+  <XfinaProvider>
+    <div class="xf-container space-y-8">
+      <!-- home is ".", not "/": a past release is served from its own
+           directory (/0.4/), and its logo should lead back to itself. -->
+      <XfinaHeader site="xfina" home="." heading own-privacy @privacy="privacyOpen = true">
+        <template #context>
+          <div class="flex items-center">
+            <Select :key="versionsData ? 'loaded' : 'loading'" :modelValue="selectedDropdownValue" @update:modelValue="onVersionChange">
+              <SelectTrigger class="w-[140px] h-9 border-border bg-background shadow-sm rounded-r-none focus:z-10 focus:ring-1">
+                <SelectValue placeholder="Version" />
+              </SelectTrigger>
+              <SelectContent v-if="versionsData">
+                <SelectGroup>
+                  <SelectItem 
+                    v-if="latestSeries" 
+                    :value="latestSeries.minor"
+                  >
+                    {{ latestSeries.minor }}.x (Latest)
+                  </SelectItem>
+                  <SelectItem 
+                    v-for="series in pastSeries" 
+                    :key="series.minor" 
+                    :value="series.minor"
+                  >
+                    {{ series.minor }}.x
+                  </SelectItem>
+                  <SelectItem 
+                    v-if="unreleasedSeries" 
+                    :value="unreleasedSeries.minor"
+                  >
+                    Unreleased
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <a v-if="shortCommitHash" 
+               :href="`https://github.com/xfina-dev/xfina/commit/${cleanCommitHash}`" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="no-underline relative z-0">
+               <Button variant="outline" class="flex items-center gap-1.5 h-9 px-3 text-xs font-mono text-muted-foreground hover:text-foreground shadow-sm rounded-l-none border-l-0">
+                 <GitCommit class="w-3.5 h-3.5" />
+                 {{ shortCommitHash }}
+               </Button>
+            </a>
           </div>
-        </div>
-        <div class="flex items-center space-x-3">
-          <a href="https://sakthipriyan.com/building-wealth" target="_blank" rel="noopener noreferrer" class="no-underline">
-            <Button variant="outline" class="h-9 px-3 font-medium text-foreground">sakthipriyan.com</Button>
-          </a>
-          <a href="https://github.com/xfina-dev/xfina" target="_blank" rel="noopener noreferrer" class="no-underline" title="GitHub Repository">
-            <Button variant="outline" size="icon">
-              <Github class="h-[1.2rem] w-[1.2rem] text-foreground" />
-              <span class="sr-only">GitHub Repository</span>
-            </Button>
-          </a>
-          <Dialog>
-            <DialogTrigger as-child>
-              <Button variant="outline" size="icon" title="Privacy & Analytics">
-                <Activity class="h-[1.2rem] w-[1.2rem] text-foreground" />
-                <span class="sr-only">Privacy & Analytics</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent class="sm:max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Privacy &amp; Analytics</DialogTitle>
-                <DialogDescription>
-                  <strong>Help Improve Xfina.</strong> Choose how you'd like to help us make Xfina better.
-                </DialogDescription>
-              </DialogHeader>
-              <div class="space-y-4 py-4">
-                <div class="flex items-center space-x-2 p-2 border rounded-md cursor-pointer hover:bg-muted" 
-                     :class="{'border-primary bg-primary/5': analyticsLevel === LEVEL_ANONYMOUS}"
-                     @click="setAnalyticsLevel(LEVEL_ANONYMOUS)">
-                  <div class="flex-1 w-full">
-                    <Accordion type="single" collapsible class="w-full">
-                      <AccordionItem value="payload" class="border-b-0">
-                        
-                        <div class="flex items-center justify-between w-full">
-                          <div class="font-semibold text-base flex items-center">
-                            Anonymous Usage Statistics 
-                            <span class="bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-md text-[10px] uppercase font-bold ml-2 tracking-wide">Recommended</span>
-                          </div>
-                          
-                          <div @click.stop>
-                            <AccordionTrigger class="group hover:no-underline p-0 data-[state=open]:border-b-0">
-                              <span class="sr-only">View exact payload details</span>
-                              <template #icon>
-                                <div class="flex items-center gap-1.5 text-xs font-mono bg-primary/10 text-primary pl-2.5 pr-2 py-1.5 rounded shrink-0 ml-2 hover:bg-primary/20 transition-colors">
-                                  <span>Payload</span>
-                                  <ChevronDown class="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                                </div>
-                              </template>
-                            </AccordionTrigger>
-                          </div>
-                        </div>
+        </template>
+      </XfinaHeader>
 
-                        <div class="text-sm text-muted-foreground mt-2">
-                          <p>Help us improve parser quality and performance, and catch broken statement formats by sharing anonymous telemetry. <strong>No personal or financial data is collected.</strong> No file contents, transaction descriptions, financial values, or account numbers are ever included.</p>
-                        </div>
-                        
-                        <div class="mt-3" @click.stop>
-                          <AccordionContent>
-                              <div class="max-h-[300px] overflow-y-auto pr-2">
-                                <div class="rounded-md border overflow-hidden bg-background">
-                                  <table class="w-full text-left text-sm">
-                                    <thead class="bg-muted/50 text-muted-foreground">
-                                      <tr>
-                                        <th class="px-2 py-1.5 font-medium border-b whitespace-nowrap">Query Param</th>
-                                        <th class="px-2 py-1.5 font-medium border-b w-full">Description</th>
-                                        <th class="px-2 py-1.5 font-medium border-b w-1/4">Example Value</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody class="divide-y">
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">v</td>
-                                        <td class="px-2 py-1.5">Standard GA4 protocol version</td>
-                                        <td class="px-2 py-1.5 font-mono">2</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">tid</td>
-                                        <td class="px-2 py-1.5">Google Analytics measurement ID</td>
-                                        <td class="px-2 py-1.5 font-mono">G-WZEYQGS8PE</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">cid</td>
-                                        <td class="px-2 py-1.5">Randomly generated session ID. Resets on every page load; never stored.</td>
-                                        <td class="px-2 py-1.5 font-mono">433214986.1786291736</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">en</td>
-                                        <td class="px-2 py-1.5">Event Name</td>
-                                        <td class="px-2 py-1.5 font-mono">parser_usage</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">ep.app_version</td>
-                                        <td class="px-2 py-1.5">Version of the web app and parsers</td>
-                                        <td class="px-2 py-1.5 font-mono">{{ appVersion }}</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">ep.parser_type</td>
-                                        <td class="px-2 py-1.5">The type of statement being parsed</td>
-                                        <td class="px-2 py-1.5 font-mono">icici_ba</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">ep.success</td>
-                                        <td class="px-2 py-1.5">True if no math/validation errors occurred</td>
-                                        <td class="px-2 py-1.5 font-mono">false</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">epn.parse_time_ms</td>
-                                        <td class="px-2 py-1.5">Time taken to process the file locally</td>
-                                        <td class="px-2 py-1.5 font-mono">2</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">epn.txns_failed</td>
-                                        <td class="px-2 py-1.5">Total failed transactions <i>(&gt; 0)</i></td>
-                                        <td class="px-2 py-1.5 font-mono">3</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">epn.declared_failed</td>
-                                        <td class="px-2 py-1.5">Total failed declared checks <i>(&gt; 0)</i></td>
-                                        <td class="px-2 py-1.5 font-mono">2</td>
-                                      </tr>
-                                      <tr>
-                                        <td class="px-2 py-1.5 font-mono text-primary/80">epn.derived_failed</td>
-                                        <td class="px-2 py-1.5">Total failed derived checks <i>(&gt; 0)</i></td>
-                                        <td class="px-2 py-1.5 font-mono">1</td>
-                                      </tr>
-                                    </tbody>
-                                  </table>
-                                </div>
-                                <div class="rounded-md border mt-4 overflow-hidden bg-background">
-                                  <table class="w-full text-left text-sm">
-                                    <thead class="bg-muted/50 text-muted-foreground">
-                                      <tr>
-                                        <th class="px-2 py-1.5 font-medium border-b">Actual Request URL (Example)</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      <tr>
-                                        <td class="p-0">
-                                          <pre class="p-2 text-xs overflow-x-auto font-mono text-muted-foreground"><code>https://www.google-analytics.com/g/collect?
-  v=2&amp;
-  tid=G-WZEYQGS8PE&amp;
-  cid=433214986.1786291736&amp;
-  en=parser_usage&amp;
-  ep.app_version=Unreleased&amp;
-  ep.parser_type=icici_ba&amp;
-  ep.success=false&amp;
-  epn.parse_time_ms=2&amp;
-  epn.txns_failed=3&amp;
-  epn.declared_failed=2&amp;
-  epn.derived_failed=1</code></pre>
-                                        </td>
-                                      </tr>
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            </AccordionContent>
-                          </div>
-                        </AccordionItem>
-                      </Accordion>
-                    </div>
-                  </div>
-                <div class="flex items-center space-x-2 p-2 border rounded-md cursor-pointer hover:bg-muted"
-                     :class="{'border-primary bg-primary/5': analyticsLevel === LEVEL_OFF}"
-                     @click="setAnalyticsLevel(LEVEL_OFF)">
-                  <div class="flex-1">
-                    <div class="font-semibold text-base">Zero Usage Statistics</div>
-                    <div class="text-sm text-muted-foreground mt-1">Opt-out completely. We respect your privacy, and no telemetry requests will be sent from your browser. However, without anonymous telemetry, it may take us longer to discover broken statement formats, fix parsing bugs, and improve parser quality and performance.</div>
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-          <Button variant="outline" size="icon" @click="toggleDark()" title="Toggle Theme">
-            <Sun v-if="isDark" class="h-[1.2rem] w-[1.2rem] text-foreground" />
-            <Moon v-else class="h-[1.2rem] w-[1.2rem] text-foreground" />
-            <span class="sr-only">Toggle theme</span>
-          </Button>
-        </div>
-      </div>
-      
+      <main class="space-y-8">
       <!-- Error Message -->
       <div v-if="error" class="p-4 bg-destructive/10 border border-destructive/20 rounded-md text-destructive">
         {{ error }}
@@ -919,7 +705,7 @@ const camsGroupedAssets = computed(() => {
                               v-if="!format.enabled"
                               class="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
                             >not built</span>
-                            <CheckCircle2 v-else class="h-4 w-4 text-emerald-500" />
+                            <CheckCircle2 v-else class="h-4 w-4 text-status-good-text" />
                           </div>
                         </div>
                       </div>
@@ -1074,69 +860,65 @@ const camsGroupedAssets = computed(() => {
             
             <div v-if="validationReport?.overall" class="flex items-center gap-3">
               <!-- Summary Badge -->
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger class="cursor-help flex items-center gap-1.5 font-semibold text-sm w-fit"
-                       :class="{
-                         'text-muted-foreground': !summaryChecksRun,
-                         'text-emerald-500': summaryChecksRun && validationReport.summary_level?.passed,
-                         'text-amber-500': summaryChecksRun && !validationReport.summary_level?.passed && validationReport.summary_level?.declared?.passed,
-                         'text-destructive': summaryChecksRun && !validationReport.summary_level?.declared?.passed
-                       }">
-                    <!-- Nothing to reconcile against is not a pass. -->
-                    <MinusCircle v-if="!summaryChecksRun" class="w-4 h-4 opacity-70" />
-                    <CheckCircle2 v-else-if="validationReport.summary_level?.passed" class="w-4 h-4" />
-                    <!-- Only derived checks failed: a warning, not a failure. -->
-                    <AlertTriangle v-else-if="validationReport.summary_level?.declared?.passed" class="w-4 h-4" />
-                    <XCircle v-else class="w-4 h-4" />
-                    <span>Summary</span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" class="p-3 max-w-sm">
-                    <div class="space-y-3 text-sm">
-                      <div v-if="validationReport.summary_level?.declared?.checks?.length > 0">
-                        <div class="font-semibold text-foreground mb-0.5">Declared Validations</div>
-                        <div class="text-muted-foreground">{{ validationReport.summary_level.declared.checks.filter(c => c.passed).length }} / {{ validationReport.summary_level.declared.checks.length }} checks passed</div>
-                      </div>
-                      <div v-if="validationReport.summary_level?.derived?.checks?.length > 0">
-                        <div class="font-semibold text-foreground mb-0.5">Derived Validations</div>
-                        <div class="text-muted-foreground">{{ validationReport.summary_level.derived.checks.filter(c => c.passed).length }} / {{ validationReport.summary_level.derived.checks.length }} checks passed</div>
-                      </div>
-                      <div v-if="!summaryChecksRun">
-                        <div class="font-semibold text-foreground mb-0.5">Statement Summary</div>
-                        <div class="text-muted-foreground">Totals not printed (nothing to reconcile)</div>
-                      </div>
+              <Tooltip>
+                <TooltipTrigger class="cursor-help flex items-center gap-1.5 font-semibold text-sm w-fit"
+                     :class="{
+                       'text-muted-foreground': !summaryChecksRun,
+                       'text-status-good-text': summaryChecksRun && validationReport.summary_level?.passed,
+                       'text-status-warning-text': summaryChecksRun && !validationReport.summary_level?.passed && validationReport.summary_level?.declared?.passed,
+                       'text-destructive': summaryChecksRun && !validationReport.summary_level?.declared?.passed
+                     }">
+                  <!-- Nothing to reconcile against is not a pass. -->
+                  <MinusCircle v-if="!summaryChecksRun" class="w-4 h-4 opacity-70" />
+                  <CheckCircle2 v-else-if="validationReport.summary_level?.passed" class="w-4 h-4" />
+                  <!-- Only derived checks failed: a warning, not a failure. -->
+                  <AlertTriangle v-else-if="validationReport.summary_level?.declared?.passed" class="w-4 h-4" />
+                  <XCircle v-else class="w-4 h-4" />
+                  <span>Summary</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" class="p-3 max-w-sm">
+                  <div class="space-y-3 text-sm">
+                    <div v-if="validationReport.summary_level?.declared?.checks?.length > 0">
+                      <div class="font-semibold text-foreground mb-0.5">Declared Validations</div>
+                      <div class="text-muted-foreground">{{ validationReport.summary_level.declared.checks.filter(c => c.passed).length }} / {{ validationReport.summary_level.declared.checks.length }} checks passed</div>
                     </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <div v-if="validationReport.summary_level?.derived?.checks?.length > 0">
+                      <div class="font-semibold text-foreground mb-0.5">Derived Validations</div>
+                      <div class="text-muted-foreground">{{ validationReport.summary_level.derived.checks.filter(c => c.passed).length }} / {{ validationReport.summary_level.derived.checks.length }} checks passed</div>
+                    </div>
+                    <div v-if="!summaryChecksRun">
+                      <div class="font-semibold text-foreground mb-0.5">Statement Summary</div>
+                      <div class="text-muted-foreground">Totals not printed (nothing to reconcile)</div>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
 
               <!-- Transaction Badge -->
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger class="cursor-help flex items-center gap-1.5 font-semibold text-sm w-fit"
-                       :class="{
-                         'text-muted-foreground': !validationReport.row_level?.checked_rows,
-                         'text-emerald-500': validationReport.row_level?.checked_rows > 0 && validationReport.row_level?.passed,
-                         'text-destructive': validationReport.row_level?.checked_rows > 0 && !validationReport.row_level?.passed
-                       }">
-                    <CheckCircle2 v-if="validationReport.row_level?.passed && validationReport.row_level?.checked_rows > 0" class="w-4 h-4" />
-                    <XCircle v-else-if="!validationReport.row_level?.passed" class="w-4 h-4" />
-                    <MinusCircle v-else class="w-4 h-4 opacity-70" />
-                    <span>Transactions</span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" class="p-3 max-w-sm">
-                    <div class="space-y-1 text-sm">
-                      <div class="font-semibold text-foreground mb-0.5">Running Transactions</div>
-                      <div class="text-muted-foreground" v-if="validationReport.row_level?.checked_rows > 0">
-                        {{ (validationReport.row_level?.checked_rows || 0) - (validationReport.row_level?.failed_rows?.length || 0) }} / {{ validationReport.row_level?.checked_rows || 0 }} txns passed
-                      </div>
-                      <div class="text-muted-foreground" v-else>
-                        Balances not printed ({{ totalTxns }} txns extracted)
-                      </div>
+              <Tooltip>
+                <TooltipTrigger class="cursor-help flex items-center gap-1.5 font-semibold text-sm w-fit"
+                     :class="{
+                       'text-muted-foreground': !validationReport.row_level?.checked_rows,
+                       'text-status-good-text': validationReport.row_level?.checked_rows > 0 && validationReport.row_level?.passed,
+                       'text-destructive': validationReport.row_level?.checked_rows > 0 && !validationReport.row_level?.passed
+                     }">
+                  <CheckCircle2 v-if="validationReport.row_level?.passed && validationReport.row_level?.checked_rows > 0" class="w-4 h-4" />
+                  <XCircle v-else-if="!validationReport.row_level?.passed" class="w-4 h-4" />
+                  <MinusCircle v-else class="w-4 h-4 opacity-70" />
+                  <span>Transactions</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" class="p-3 max-w-sm">
+                  <div class="space-y-1 text-sm">
+                    <div class="font-semibold text-foreground mb-0.5">Running Transactions</div>
+                    <div class="text-muted-foreground" v-if="validationReport.row_level?.checked_rows > 0">
+                      {{ (validationReport.row_level?.checked_rows || 0) - (validationReport.row_level?.failed_rows?.length || 0) }} / {{ validationReport.row_level?.checked_rows || 0 }} txns passed
                     </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <div class="text-muted-foreground" v-else>
+                      Balances not printed ({{ totalTxns }} txns extracted)
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             </div>
 
             <div v-else class="text-sm font-medium text-muted-foreground">-</div>
@@ -1177,43 +959,39 @@ const camsGroupedAssets = computed(() => {
               <div class="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-2 items-center">
                 <div class="col-span-3 flex justify-between items-center mb-1 border-b pb-2">
                   <span class="text-sm font-medium">Opening Balance</span>
-                  <span class="font-bold font-mono text-lg text-primary">{{ formatCurrency(ccStatement.summary.xfina?.openingBalance) }}</span>
+                  <span class="font-bold font-mono text-lg text-foreground">{{ formatCurrency(ccStatement.summary.xfina?.openingBalance) }}</span>
                 </div>
                 
                 <span class="text-sm text-muted-foreground">Payments</span>
                 <div class="justify-self-end">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
-                        {{ ccStatement.transactions?.transaction?.filter(t => t.txnType === 'CREDIT').length || 0 }}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Number of payments</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
+                      {{ ccStatement.transactions?.transaction?.filter(t => t.txnType === 'CREDIT').length || 0 }}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Number of payments</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-                <span class="font-medium font-mono text-emerald-500 text-right">+ {{ formatCurrency(ccStatement.summary.xfina?.paymentCredit) }}</span>
+                <span class="font-medium font-mono text-status-good-text text-right">+ {{ formatCurrency(ccStatement.summary.xfina?.paymentCredit) }}</span>
 
                 <div v-if="ccStatement.summary.xfina?.ownerCreditBreakdown && Object.keys(ccStatement.summary.xfina.ownerCreditBreakdown).length > 1" class="col-span-3 pl-4 border-l-2 border-muted space-y-1 my-1">
                   <div v-for="(amount, owner) in ccStatement.summary.xfina.ownerCreditBreakdown" :key="owner" class="flex justify-between items-center">
                     <span class="text-sm text-muted-foreground truncate mr-2">{{ owner }}</span>
-                    <span class="font-medium font-mono text-sm text-emerald-500">+ {{ formatCurrency(amount) }}</span>
+                    <span class="font-medium font-mono text-sm text-status-good-text">+ {{ formatCurrency(amount) }}</span>
                   </div>
                 </div>
                 
                 <span class="text-sm text-muted-foreground">Purchases</span>
                 <div class="justify-self-end">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
-                        {{ ccStatement.transactions?.transaction?.filter(t => t.txnType === 'DEBIT').length || 0 }}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Number of purchases</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
+                      {{ ccStatement.transactions?.transaction?.filter(t => t.txnType === 'DEBIT').length || 0 }}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Number of purchases</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
                 <span class="font-medium font-mono text-foreground text-right">{{ formatCurrency(ccStatement.summary.xfina?.purchasesDebits) }}</span>
                 
@@ -1231,7 +1009,7 @@ const camsGroupedAssets = computed(() => {
                 
                 <div class="col-span-3 flex justify-between items-center mt-1 border-t pt-2">
                   <span class="text-sm font-medium">Total Dues</span>
-                  <span class="font-bold font-mono text-lg text-primary">{{ formatCurrency(ccStatement.summary.totalDueAmount) }}</span>
+                  <span class="font-bold font-mono text-lg text-foreground">{{ formatCurrency(ccStatement.summary.totalDueAmount) }}</span>
                 </div>
                 
                 <div class="col-span-3 flex justify-between items-center mt-1">
@@ -1261,24 +1039,24 @@ const camsGroupedAssets = computed(() => {
             </CardHeader>
             <CardContent>
               <div class="space-y-2">
-                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.openingBalance !== 0 || ccStatement.summary.xfina.rewardPointsSummary.closingBalance !== 0" class="flex justify-between items-center mb-2 border-b pb-2"><span class="text-sm font-medium">Opening Balance</span><span class="font-bold font-mono text-lg text-primary">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.openingBalance) }}</span></div>
+                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.openingBalance !== 0 || ccStatement.summary.xfina.rewardPointsSummary.closingBalance !== 0" class="flex justify-between items-center mb-2 border-b pb-2"><span class="text-sm font-medium">Opening Balance</span><span class="font-bold font-mono text-lg text-foreground">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.openingBalance) }}</span></div>
                 
-                <div class="flex justify-between items-center"><span class="text-sm text-muted-foreground">Earned</span><span class="font-medium font-mono text-emerald-500">+{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.earned) }}</span></div>
+                <div class="flex justify-between items-center"><span class="text-sm text-muted-foreground">Earned</span><span class="font-medium font-mono text-status-good-text">+{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.earned) }}</span></div>
                 
                 <div v-if="(ccStatement.summary.xfina.rewardPrograms && ccStatement.summary.xfina.rewardPrograms.length > 0) || ccStatement.summary.xfina.rewardPointsSummary.earnedUnaccounted" class="pl-4 border-l-2 border-muted space-y-1 my-1">
                   <div class="flex justify-between items-center">
                     <span class="text-sm text-muted-foreground truncate mr-2">Rewards</span>
-                    <span class="font-medium font-mono text-sm text-emerald-500">+{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.defaultRewards) }}</span>
+                    <span class="font-medium font-mono text-sm text-status-good-text">+{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.defaultRewards) }}</span>
                   </div>
                   <div v-for="(prog, idx) in ccStatement.summary.xfina.rewardPrograms" :key="idx" class="flex justify-between items-center">
                     <span class="text-sm text-muted-foreground truncate mr-2" :title="prog.program">{{ prog.program }}</span>
-                    <span class="font-medium font-mono text-sm text-emerald-500">+{{ formatNumber(prog.bonusPoints) }}</span>
+                    <span class="font-medium font-mono text-sm text-status-good-text">+{{ formatNumber(prog.bonusPoints) }}</span>
                   </div>
                   <!-- What the statement credits without itemising it, e.g. a
                        balance carried over from a replaced card. -->
                   <div v-if="ccStatement.summary.xfina.rewardPointsSummary.earnedUnaccounted" class="flex justify-between items-center" title="Earned that the transactions and bonus programs do not account for">
                     <span class="text-sm text-muted-foreground truncate mr-2">Unaccounted<span class="ml-1 text-[10px] font-semibold text-muted-foreground/70 bg-muted/40 rounded px-1 py-0.5 align-middle">derived</span></span>
-                    <span class="font-medium font-mono text-sm text-amber-500">{{ ccStatement.summary.xfina.rewardPointsSummary.earnedUnaccounted > 0 ? '+' : '' }}{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.earnedUnaccounted) }}</span>
+                    <span class="font-medium font-mono text-sm text-status-warning-text">{{ ccStatement.summary.xfina.rewardPointsSummary.earnedUnaccounted > 0 ? '+' : '' }}{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.earnedUnaccounted) }}</span>
                   </div>
                 </div>
 
@@ -1292,9 +1070,9 @@ const camsGroupedAssets = computed(() => {
                   </div>
                 </div>
                 
-                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.openingBalance !== 0 || ccStatement.summary.xfina.rewardPointsSummary.closingBalance !== 0" class="flex justify-between items-center mt-2 border-t pt-2"><span class="text-sm font-medium">Closing Balance</span><span class="font-bold font-mono text-lg text-primary">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.closingBalance) }}</span></div>
-                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.expiringIn30Days" class="flex justify-between items-center text-rose-500"><span class="text-xs">Expiring (30d)</span><span class="font-medium font-mono text-xs">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.expiringIn30Days) }}</span></div>
-                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.expiringIn60Days" class="flex justify-between items-center text-rose-500"><span class="text-xs">Expiring (60d)</span><span class="font-medium font-mono text-xs">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.expiringIn60Days) }}</span></div>
+                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.openingBalance !== 0 || ccStatement.summary.xfina.rewardPointsSummary.closingBalance !== 0" class="flex justify-between items-center mt-2 border-t pt-2"><span class="text-sm font-medium">Closing Balance</span><span class="font-bold font-mono text-lg text-foreground">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.closingBalance) }}</span></div>
+                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.expiringIn30Days" class="flex justify-between items-center text-status-critical-text"><span class="text-xs">Expiring (30d)</span><span class="font-medium font-mono text-xs">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.expiringIn30Days) }}</span></div>
+                <div v-if="ccStatement.summary.xfina.rewardPointsSummary.expiringIn60Days" class="flex justify-between items-center text-status-critical-text"><span class="text-xs">Expiring (60d)</span><span class="font-medium font-mono text-xs">{{ formatNumber(ccStatement.summary.xfina.rewardPointsSummary.expiringIn60Days) }}</span></div>
               </div>
             </CardContent>
           </Card>
@@ -1305,7 +1083,7 @@ const camsGroupedAssets = computed(() => {
             <AccordionTrigger class="group hover:no-underline px-4 py-4 data-[state=open]:border-b border-border">
               <span class="font-medium text-foreground text-lg text-left w-full pr-4">Transactions</span>
               <template #icon>
-                <div class="flex items-center gap-1.5 text-xs font-mono bg-primary/10 text-primary pl-2.5 pr-2 py-1.5 rounded shrink-0 ml-2">
+                <div class="flex items-center gap-1.5 text-xs font-mono bg-primary/10 text-primary-text pl-2.5 pr-2 py-1.5 rounded shrink-0 ml-2">
                   <span>{{ ccStatement.transactions?.transaction?.length || 0 }} {{ ccStatement.transactions?.transaction?.length === 1 ? 'Txn' : 'Txns' }}</span>
                   <ChevronDown v-if="ccStatement.transactions?.transaction?.length" class="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </div>
@@ -1331,13 +1109,13 @@ const camsGroupedAssets = computed(() => {
                       {{ txn.narration }}
                     </TableCell>
                     <TableCell class="text-foreground text-xs text-muted-foreground whitespace-nowrap">{{ txn.xfina?.owner }}</TableCell>
-                    <TableCell class="text-right font-mono whitespace-nowrap" :class="{'text-emerald-500': txn.txnType === 'CREDIT', 'text-foreground': txn.txnType !== 'CREDIT'}">
+                    <TableCell class="text-right font-mono whitespace-nowrap" :class="{'text-status-good-text': txn.txnType === 'CREDIT', 'text-foreground': txn.txnType !== 'CREDIT'}">
                       <div class="inline-flex items-baseline justify-end">
                         <span v-if="txn.txnType === 'CREDIT'">+</span>
                         <span>{{ formatCurrency(txn.amount) }}</span>
                       </div>
                     </TableCell>
-                    <TableCell class="text-right font-mono text-emerald-500">{{ txn.xfina?.rewardPoints > 0 ? '+' + txn.xfina.rewardPoints : (txn.xfina?.rewardPoints || '') }}</TableCell>
+                    <TableCell class="text-right font-mono text-status-good-text">{{ txn.xfina?.rewardPoints > 0 ? '+' + txn.xfina.rewardPoints : (txn.xfina?.rewardPoints || '') }}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -1381,12 +1159,12 @@ const camsGroupedAssets = computed(() => {
                 </div>
                 <div class="flex flex-col">
                   <span class="text-xs text-muted-foreground mb-1">Market Value</span>
-                  <span class="font-medium font-mono text-xl text-primary">{{ formatCurrency(mfStatement.summary?.currentValue) }}</span>
+                  <span class="font-medium font-mono text-xl text-foreground">{{ formatCurrency(mfStatement.summary?.currentValue) }}</span>
                 </div>
                 <div class="flex flex-col">
                   <span class="text-xs text-muted-foreground mb-1">Unrealized P&L</span>
                   <span class="font-medium font-mono text-xl" 
-                        :class="(mfStatement.summary?.currentValue || 0) > (mfStatement.summary?.investmentValue || 0) ? 'text-emerald-500' : ((mfStatement.summary?.currentValue || 0) < (mfStatement.summary?.investmentValue || 0) ? 'text-rose-500' : 'text-foreground')">
+                        :class="(mfStatement.summary?.currentValue || 0) > (mfStatement.summary?.investmentValue || 0) ? 'text-status-good-text' : ((mfStatement.summary?.currentValue || 0) < (mfStatement.summary?.investmentValue || 0) ? 'text-status-critical-text' : 'text-foreground')">
                     {{ (mfStatement.summary?.currentValue || 0) > (mfStatement.summary?.investmentValue || 0) ? '+ ' : '' }}{{ formatCurrency((mfStatement.summary?.currentValue || 0) - (mfStatement.summary?.investmentValue || 0)) }}
                   </span>
                 </div>
@@ -1407,13 +1185,13 @@ const camsGroupedAssets = computed(() => {
                  <div class="flex flex-col items-start w-full gap-3">
                    <!-- Top Row: Chevron, Name, Tags, Txn Pill -->
                    <div class="grid grid-cols-[auto_1fr_auto] items-start gap-4 w-full">
-                     <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary shadow-sm shrink-0" v-if="asset.isin">{{ asset.isin }}</span>
+                     <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary-text shadow-sm shrink-0" v-if="asset.isin">{{ asset.isin }}</span>
                      
                      <div class="flex flex-wrap items-center gap-2 min-w-0">
                        <span class="font-medium text-foreground text-left text-base lg:text-lg leading-tight break-words">{{ asset.name }}</span>
-                       <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary shadow-sm shrink-0" v-if="asset.symbol">{{ asset.symbol }}</span>
+                       <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary-text shadow-sm shrink-0" v-if="asset.symbol">{{ asset.symbol }}</span>
                      </div>
-                    <AccordionTrigger class="py-1.5 flex-none font-mono text-xs font-normal hover:no-underline justify-end gap-1.5 bg-primary/10 text-primary hover:bg-primary/20 transition-colors pl-2.5 pr-2 rounded shrink-0 group w-auto" :disabled="!asset.transactions?.length">
+                    <AccordionTrigger class="py-1.5 flex-none font-mono text-xs font-normal hover:no-underline justify-end gap-1.5 bg-primary/10 text-primary-text hover:bg-primary/20 transition-colors pl-2.5 pr-2 rounded shrink-0 group w-auto" :disabled="!asset.transactions?.length">
                        <span>{{ asset.transactions?.length || 0 }} {{ asset.transactions?.length === 1 ? 'Txn' : 'Txns' }}</span>
                        <ChevronDown v-if="asset.transactions?.length" class="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                        <template #icon><span class="hidden"></span></template>
@@ -1471,7 +1249,7 @@ const camsGroupedAssets = computed(() => {
                        <div class="w-px h-8 bg-border/60" v-if="asset.periodSellUnits || asset.periodSellCount"></div>
                        <div class="flex flex-col items-end shrink-0">
                          <span class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Closing</span>
-                         <span class="font-mono font-bold text-primary text-sm text-right">{{ formatUnits(asset.closingBalance || 0) }}</span>
+                         <span class="font-mono font-bold text-foreground text-sm text-right">{{ formatUnits(asset.closingBalance || 0) }}</span>
                        </div>
                        <div class="w-px h-8 bg-border/60"></div>
                        <div class="flex flex-col items-end shrink-0">
@@ -1493,7 +1271,7 @@ const camsGroupedAssets = computed(() => {
                        <div class="w-px h-8 bg-border/60"></div>
                        <div class="flex flex-col items-end w-[130px] shrink-0">
                          <span class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Market Value</span>
-                         <span class="text-sm font-bold font-mono text-primary">{{ formatCurrency(asset.marketValue) }}</span>
+                         <span class="text-sm font-bold font-mono text-foreground">{{ formatCurrency(asset.marketValue) }}</span>
                        </div>
                        <div class="w-px h-8 bg-border/60"></div>
                        <div class="flex flex-col items-end w-[130px] shrink-0">
@@ -1517,16 +1295,14 @@ const camsGroupedAssets = computed(() => {
                          <TableHead class="w-[140px] text-right text-muted-foreground whitespace-nowrap">
                            <div class="flex items-center justify-end gap-1.5">
                              <span>Amount</span>
-                             <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger class="cursor-help">
-                                   <HelpCircle class="h-3.5 w-3.5 text-muted-foreground" />
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p class="max-w-[200px] text-xs font-normal whitespace-normal text-left">Invested (including the fee), if redeemed it is excluding the fee</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger class="cursor-help">
+                                 <HelpCircle class="h-3.5 w-3.5 text-muted-foreground" />
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <p class="max-w-[200px] text-xs font-normal whitespace-normal text-left">Invested (including the fee), if redeemed it is excluding the fee</p>
+                               </TooltipContent>
+                             </Tooltip>
                            </div>
                          </TableHead>
                          <TableHead class="w-[120px] text-right text-muted-foreground whitespace-nowrap">Units</TableHead>
@@ -1539,9 +1315,8 @@ const camsGroupedAssets = computed(() => {
                        <TableRow v-for="(txn, idx) in asset.transactions" :key="idx" class="hover:bg-muted/50 transition-colors">
                          <TableCell class="text-foreground whitespace-nowrap">{{ formatDate(txn.orderDate) }}</TableCell>
                          <TableCell class="text-foreground">
-                            <span class="font-medium text-xs px-2 py-1 rounded" :class="{'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400': txn.type === 'BUY', 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400': txn.type === 'SELL'}">
-                              {{ txn.type || '-' }}
-                            </span>
+                            <Badge v-if="txn.type === 'BUY' || txn.type === 'SELL'" :variant="txn.type === 'BUY' ? 'good' : 'critical'">{{ txn.type }}</Badge>
+                            <span v-else class="text-xs">{{ txn.type || '-' }}</span>
                           </TableCell>
                          <TableCell class="text-foreground text-xs whitespace-pre-line">{{ txn.narration || '-' }}</TableCell>
                          <TableCell class="text-right font-mono text-foreground whitespace-nowrap">
@@ -1593,37 +1368,33 @@ const camsGroupedAssets = computed(() => {
                 
                 <span class="text-sm text-muted-foreground">Deposits</span>
                 <div class="justify-self-end">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
-                        {{ bankStatement.transactions?.transaction?.filter(t => t.type === 'CREDIT').length || 0 }}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Number of deposits</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
+                      {{ bankStatement.transactions?.transaction?.filter(t => t.type === 'CREDIT').length || 0 }}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Number of deposits</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-                <span class="font-medium font-mono text-emerald-500 text-right">+ {{ formatCurrency(bankStatement.transactions?.transaction?.filter(t => t.type === 'CREDIT').reduce((s, t) => s + Number(t.amount || 0), 0) || 0) }}</span>
+                <span class="font-medium font-mono text-status-good-text text-right">+ {{ formatCurrency(bankStatement.transactions?.transaction?.filter(t => t.type === 'CREDIT').reduce((s, t) => s + Number(t.amount || 0), 0) || 0) }}</span>
                 
                 <span class="text-sm text-muted-foreground">Withdrawals</span>
                 <div class="justify-self-end">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
-                        {{ bankStatement.transactions?.transaction?.filter(t => t.type === 'DEBIT').length || 0 }}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Number of withdrawals</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger class="text-xs text-muted-foreground bg-muted/50 px-1.5 rounded cursor-help font-mono border border-border/50">
+                      {{ bankStatement.transactions?.transaction?.filter(t => t.type === 'DEBIT').length || 0 }}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Number of withdrawals</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
                 <span class="font-medium font-mono text-foreground text-right">{{ formatCurrency(bankStatement.transactions?.transaction?.filter(t => t.type === 'DEBIT').reduce((s, t) => s + Number(t.amount || 0), 0) || 0) }}</span>
                 
                 <div class="col-span-3 flex justify-between items-center mt-1 border-t pt-2">
                   <span class="text-sm font-medium">Closing Balance</span>
-                  <span class="font-bold font-mono text-lg text-primary">{{ formatCurrency(bankStatement.summary?.currentBalance) }}</span>
+                  <span class="font-bold font-mono text-lg text-foreground">{{ formatCurrency(bankStatement.summary?.currentBalance) }}</span>
                 </div>
               </div>
             </CardContent>
@@ -1675,7 +1446,7 @@ const camsGroupedAssets = computed(() => {
                 </span>
               </span>
               <template #icon>
-                <div class="flex items-center gap-1.5 text-xs font-mono bg-primary/10 text-primary pl-2.5 pr-2 py-1.5 rounded shrink-0 ml-2">
+                <div class="flex items-center gap-1.5 text-xs font-mono bg-primary/10 text-primary-text pl-2.5 pr-2 py-1.5 rounded shrink-0 ml-2">
                   <span>{{ bankStatement.transactions?.transaction?.length || 0 }} {{ bankStatement.transactions?.transaction?.length === 1 ? 'Txn' : 'Txns' }}</span>
                   <ChevronDown v-if="bankStatement.transactions?.transaction?.length" class="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </div>
@@ -1696,7 +1467,7 @@ const camsGroupedAssets = computed(() => {
                   <TableRow v-for="(txn, idx) in bankStatement.transactions?.transaction" :key="idx" class="hover:bg-muted/50 transition-colors">
                     <TableCell class="font-medium whitespace-nowrap">{{ formatDateTime(txn.xfina?.parsedDate || txn.transactionTimestamp, 'transactions.transaction.transactionTimestamp', bankStatement.xfina?.dateOnlyPaths) }}</TableCell>
                     <TableCell class="text-foreground text-sm">{{ txn.narration }}</TableCell>
-                    <TableCell class="text-right font-mono whitespace-nowrap" :class="{'text-emerald-500': txn.type === 'CREDIT', 'text-foreground': txn.type !== 'CREDIT'}">
+                    <TableCell class="text-right font-mono whitespace-nowrap" :class="{'text-status-good-text': txn.type === 'CREDIT', 'text-foreground': txn.type !== 'CREDIT'}">
                         <span v-if="txn.type === 'CREDIT'">+</span>
                         {{ formatCurrency(txn.amount) }}
                     </TableCell>
@@ -1809,12 +1580,12 @@ const camsGroupedAssets = computed(() => {
                 </div>
                 <div class="flex flex-col">
                   <span class="text-xs text-muted-foreground mb-1">Market Value</span>
-                  <span class="font-medium font-mono text-xl text-primary">{{ formatCurrency(equityStatement.summary?.currentValue) }}</span>
+                  <span class="font-medium font-mono text-xl text-foreground">{{ formatCurrency(equityStatement.summary?.currentValue) }}</span>
                 </div>
                 <div class="flex flex-col">
                   <span class="text-xs text-muted-foreground mb-1">Unrealized P&L</span>
                   <span class="font-medium font-mono text-xl" 
-                        :class="(equityStatement.summary?.currentValue || 0) >= (equityStatement.summary?.investmentValue || 0) ? 'text-emerald-500' : 'text-rose-500'">
+                        :class="(equityStatement.summary?.currentValue || 0) >= (equityStatement.summary?.investmentValue || 0) ? 'text-status-good-text' : 'text-status-critical-text'">
                     {{ (equityStatement.summary?.currentValue || 0) >= (equityStatement.summary?.investmentValue || 0) ? '+ ' : '' }}{{ formatCurrency((equityStatement.summary?.currentValue || 0) - (equityStatement.summary?.investmentValue || 0)) }}
                   </span>
                 </div>
@@ -1835,14 +1606,14 @@ const camsGroupedAssets = computed(() => {
                  <div class="flex flex-col items-start w-full gap-3">
                    <!-- Top Row: Chevron, Name, Tags, Txn Pill -->
                    <div class="grid grid-cols-[auto_1fr_auto] items-start gap-4 w-full">
-                     <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary shadow-sm shrink-0" v-if="holding.isin">{{ holding.isin }}</span>
+                     <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary-text shadow-sm shrink-0" v-if="holding.isin">{{ holding.isin }}</span>
                      
                      <div class="flex flex-wrap items-center gap-2 min-w-0">
                        <span class="font-medium text-foreground text-left text-base lg:text-lg leading-tight break-words">{{ holding.issuerName || holding.description }}</span>
-                       <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary shadow-sm shrink-0">{{ holding.description || holding.issuerName }}</span>
+                       <span class="text-xs font-medium font-mono bg-muted/30 border border-primary/20 rounded px-2 py-0.5 text-primary-text shadow-sm shrink-0">{{ holding.description || holding.issuerName }}</span>
                      </div>
                      
-                     <AccordionTrigger class="py-1.5 flex-none font-mono text-xs font-normal hover:no-underline justify-end gap-1.5 bg-primary/10 text-primary hover:bg-primary/20 transition-colors pl-2.5 pr-2 rounded shrink-0 group w-auto" :disabled="!getAssetTransactions(holding).length">
+                     <AccordionTrigger class="py-1.5 flex-none font-mono text-xs font-normal hover:no-underline justify-end gap-1.5 bg-primary/10 text-primary-text hover:bg-primary/20 transition-colors pl-2.5 pr-2 rounded shrink-0 group w-auto" :disabled="!getAssetTransactions(holding).length">
                        <span>{{ getAssetTransactions(holding).length }} {{ getAssetTransactions(holding).length === 1 ? 'Txn' : 'Txns' }}</span>
                        <ChevronDown v-if="getAssetTransactions(holding).length" class="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                        <template #icon><span class="hidden"></span></template>
@@ -1875,7 +1646,7 @@ const camsGroupedAssets = computed(() => {
                        <div class="w-px h-8 bg-border/60"></div>
                        <div class="flex flex-col items-end shrink-0">
                          <span class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Closing</span>
-                         <span class="font-mono font-bold text-primary text-sm text-right">{{ formatUnits(holding.units) }}</span>
+                         <span class="font-mono font-bold text-foreground text-sm text-right">{{ formatUnits(holding.units) }}</span>
                        </div>
                        <div class="w-px h-8 bg-border/60"></div>
                        <div class="flex flex-col items-end shrink-0">
@@ -1897,7 +1668,7 @@ const camsGroupedAssets = computed(() => {
                        <div class="w-px h-8 bg-border/60"></div>
                        <div class="flex flex-col items-end w-[130px] shrink-0">
                          <span class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Market Value</span>
-                         <span class="text-sm font-bold font-mono text-primary">{{ formatCurrency((holding.units || 0) * (holding.lastTradedPrice || 0)) }}</span>
+                         <span class="text-sm font-bold font-mono text-foreground">{{ formatCurrency((holding.units || 0) * (holding.lastTradedPrice || 0)) }}</span>
                        </div>
                        <div class="w-px h-8 bg-border/60"></div>
                        <div class="flex flex-col items-end w-[130px] shrink-0">
@@ -1921,16 +1692,14 @@ const camsGroupedAssets = computed(() => {
                          <TableHead class="w-[140px] text-right text-muted-foreground whitespace-nowrap">
                            <div class="flex items-center justify-end gap-1.5">
                              <span>Amount</span>
-                             <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger class="cursor-help">
-                                   <HelpCircle class="h-3.5 w-3.5 text-muted-foreground" />
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p class="max-w-[200px] text-xs font-normal whitespace-normal text-left">Invested (including the fee), if redeemed it is excluding the fee</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger class="cursor-help">
+                                 <HelpCircle class="h-3.5 w-3.5 text-muted-foreground" />
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <p class="max-w-[200px] text-xs font-normal whitespace-normal text-left">Invested (including the fee), if redeemed it is excluding the fee</p>
+                               </TooltipContent>
+                             </Tooltip>
                            </div>
                          </TableHead>
                          <TableHead class="w-[120px] text-right text-muted-foreground whitespace-nowrap">Units</TableHead>
@@ -1943,9 +1712,8 @@ const camsGroupedAssets = computed(() => {
                        <TableRow v-for="(txn, idx) in getAssetTransactions(holding)" :key="idx" class="hover:bg-muted/50 transition-colors">
                          <TableCell class="text-foreground whitespace-nowrap">{{ formatDateTime(txn.transactionDateTime, 'transactions.transaction.transactionDateTime', equityStatement.xfina?.dateOnlyPaths) }}</TableCell>
                          <TableCell class="text-foreground">
-                            <span class="font-medium text-xs px-2 py-1 rounded" :class="{'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400': txn.type === 'BUY', 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400': txn.type === 'SELL'}">
-                              {{ txn.type || '-' }}
-                            </span>
+                            <Badge v-if="txn.type === 'BUY' || txn.type === 'SELL'" :variant="txn.type === 'BUY' ? 'good' : 'critical'">{{ txn.type }}</Badge>
+                            <span v-else class="text-xs">{{ txn.type || '-' }}</span>
                          </TableCell>
                          <TableCell class="text-foreground text-xs">-</TableCell>
                          <TableCell class="text-right font-mono text-foreground whitespace-nowrap">{{ formatCurrency(txn.tradeValue) }}</TableCell>
@@ -1961,6 +1729,19 @@ const camsGroupedAssets = computed(() => {
              </AccordionItem>
             </Accordion>
       </div>
+      </main>
+
+      <!-- Once a file has been read there is something to react to: how it
+           went, and where to say so (xfina-ui's card, shared with the other
+           Xfina sites). The answer stays in this browser; nothing is sent. -->
+      <FeedbackCard
+        v-if="ready.length" class="pt-8"
+        product="Xfina" repo="https://github.com/xfina-dev/xfina"
+        storage-key="xfina_feedback" nudge="Found this useful? A minute of feedback shapes what we build next."
+      />
+
+      <XfinaFamily site="xfina" class="pt-8" />
     </div>
-  </div>
+    <PrivacyDialog v-model:open="privacyOpen" :app-version="appVersion" />
+  </XfinaProvider>
 </template>

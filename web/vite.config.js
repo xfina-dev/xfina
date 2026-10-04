@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import xfina from 'xfina-ui/vite'
 import path from 'path'
 import { execSync } from 'child_process'
 
@@ -14,7 +15,9 @@ try {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  // xfina() puts the shared theme script first in <head>, so light or dark is
+  // set before the first paint, on every xfina.dev site alike.
+  plugins: [vue(), xfina()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
