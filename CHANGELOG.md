@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-11
+
+### Changed
+
+- **Web:** the site is built on [xfina-ui](https://github.com/xfina-dev/xfina-ui),
+  the theme and components every xfina.dev site shares, pinned to 0.9.0. Its
+  copy of shadcn-vue's components and its own colour tokens are gone, with the
+  dependencies only they used. The header is the family's shared one, with
+  the version picker beside the title and links to Xfina Data and Labs, and
+  the family's cards close the page; the sakthipriyan.com button moved there,
+  under "Used by". Primary is now the brand blue. Light or dark is set before
+  the first paint and remembered across xfina.dev. Credits, gains and passed
+  checks take the shared status colours, and BUY and SELL are status badges.
+- **Web:** once a file has been read, a feedback card above the family cards
+  asks how it went, then offers a star, a share or a story, or a problem
+  report or feature request. Each opens one of the new issue forms with the
+  page filled in; the answer stays in the browser and nothing is sent.
+
 ## [0.8.1] - 2026-10-02
 
 ### Fixed
