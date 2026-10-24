@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import init, { parse, formats, version as wasmVersion } from 'xfina-wasm';
-import { HelpCircle, Loader2, ArrowUp, ArrowDown, GitCommit, CheckCircle2, AlertTriangle, XCircle, MinusCircle, Upload, Lock, X, ExternalLink, ChevronDown } from 'lucide-vue-next';
+import { HelpCircle, Loader2, ArrowUp, ArrowDown, GitCommit, CheckCircle2, XCircle, Upload, Lock, X, ExternalLink, ChevronDown } from 'lucide-vue-next';
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger, Badge, Button,
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -13,7 +13,11 @@ import {
 } from 'xfina-ui';
 import { trackParserEvent } from '@/lib/analytics.js';
 import StatementHeader from '@/components/StatementHeader.vue';
+import PublicData from '@/components/PublicData.vue';
+import FileStatus from '@/components/FileStatus.vue';
+import { groupPublicFormats } from '@/lib/publishers.js';
 import PrivacyDialog from '@/components/PrivacyDialog.vue';
+import { formatDate, formatDateTime } from '@/lib/format.js';
 
 const privacyOpen = ref(false);
 
@@ -35,11 +39,15 @@ const files = ref([]);
 const activeId = ref(null);
 const dropping = ref(false);
 let nextId = 0;
-// Whatever arrives next takes the view. Set when files are dropped or a locked
-// one is opened, and cleared by the first of them that parses -- so importing
-// a folder settles on its first readable statement instead of flicking through
-// every one as they are read.
-let focusNext = false;
+// The last file a drop reads takes the view, once the whole drop is read:
+// what someone just added is what they came to see. Moving the view once at
+// the end, rather than as each file finishes, keeps a folder import from
+// flicking through every statement. Set when files are dropped or a locked one
+// is opened.
+let focusOnDrain = false;
+let lastRead = null;
+// The Market Data file to show, which that tab keeps its own selection of.
+const marketFocusId = ref(null);
 
 const locked = computed(() => files.value.filter(f => f.status === 'locked'));
 const failed = computed(() => files.value.filter(f => f.status === 'failed'));
@@ -47,7 +55,18 @@ const ready = computed(() => files.value.filter(f => f.status === 'parsed'));
 const isProcessing = computed(() => files.value.some(f => f.status === 'reading' || f.status === 'pending'));
 const readCount = computed(() => files.value.filter(f => f.status !== 'pending' && f.status !== 'reading').length);
 
-const active = computed(() => ready.value.find(f => f.id === activeId.value) ?? ready.value[0] ?? null);
+/**
+ * Two areas, never mixed: somebody's own statements, and data a publisher
+ * hands to anyone. One drop zone feeds both -- each file says which it is --
+ * and each has its own tab, so a pile of index history never buries a bank
+ * statement, and a statement's password prompt never sits among NAVs.
+ */
+const view = ref('personal');
+const areaOf = (entry) => entry.response?.area ?? 'personal';
+const personalReady = computed(() => ready.value.filter(f => areaOf(f) === 'personal'));
+const publicReady = computed(() => ready.value.filter(f => areaOf(f) === 'public'));
+
+const active = computed(() => personalReady.value.find(f => f.id === activeId.value) ?? personalReady.value[0] ?? null);
 
 // Every view reads the selected file's parse. Switching tabs is a re-render,
 // not a re-parse: each file is read once, when it arrives.
@@ -64,7 +83,6 @@ const bankStatement = statementOf('bank_account');
 const ccStatement = statementOf('credit_card');
 const mfStatement = statementOf('mutual_funds');
 const equityStatement = statementOf('intl_stocks');
-const rateSheet = statementOf('reference_rates');
 
 
 const versionsData = ref(null);
@@ -167,7 +185,7 @@ const accept = (list) => {
             error: null,
         });
     }
-    if (files.value.some(f => f.status === 'pending')) focusNext = true;
+    if (files.value.some(f => f.status === 'pending')) focusOnDrain = true;
     drain();
 };
 
@@ -190,9 +208,21 @@ const onDrop = (event) => {
 const drain = async () => {
     if (files.value.some(f => f.status === 'reading')) return;
     const next = files.value.find(f => f.status === 'pending');
-    if (!next) return;
+    if (!next) {
+        if (focusOnDrain && lastRead) show(lastRead);
+        focusOnDrain = false;
+        lastRead = null;
+        return;
+    }
     await read(next);
     await drain();
+};
+
+/** Brings a file into view: its tab, and its card selected. */
+const show = (entry) => {
+    view.value = areaOf(entry);
+    if (areaOf(entry) === 'personal') activeId.value = entry.id;
+    else marketFocusId.value = entry.id;
 };
 
 const read = async (entry) => {
@@ -227,9 +257,10 @@ const read = async (entry) => {
 
         entry.response = response;
         entry.status = 'parsed';
-        if (focusNext || activeId.value === null) {
+        if (focusOnDrain) {
+            lastRead = entry;
+        } else if (areaOf(entry) === 'personal' && activeId.value === null) {
             activeId.value = entry.id;
-            focusNext = false;
         }
         trackParserEvent(response.format, response.validation?.overall === 'passed',
             Math.round(elapsed), validationMetrics(response.validation), appVersion);
@@ -246,13 +277,13 @@ const read = async (entry) => {
 const unlock = (entry) => {
     entry.status = 'pending';
     // You typed the password to read this one, so show it.
-    focusNext = true;
+    focusOnDrain = true;
     drain();
 };
 
 const remove = (entry) => {
     files.value = files.value.filter(f => f !== entry);
-    if (activeId.value === entry.id) activeId.value = ready.value[0]?.id ?? null;
+    if (activeId.value === entry.id) activeId.value = personalReady.value[0]?.id ?? null;
 };
 
 const clearAll = () => {
@@ -267,11 +298,12 @@ const CATEGORY_LABELS = {
     mutual_funds: 'Mutual Fund',
     intl_stocks: 'Intl Stocks',
     reference_rates: 'Reference Rates',
+    market_data: 'Market Data',
 };
 
 // A fixed order, not the order files happened to be dropped in: the same pile
 // should read the same way twice.
-const CATEGORY_ORDER = ['bank_account', 'credit_card', 'mutual_funds', 'intl_stocks', 'reference_rates'];
+const CATEGORY_ORDER = ['bank_account', 'credit_card', 'mutual_funds', 'intl_stocks', 'reference_rates', 'market_data'];
 
 /**
  * Imported statements, under the heading each belongs to.
@@ -284,7 +316,7 @@ const groupedReady = computed(() =>
         .map(category => ({
             category,
             label: CATEGORY_LABELS[category],
-            entries: ready.value
+            entries: personalReady.value
                 .filter(e => e.response?.category === category)
                 .sort(byPeriod),
         }))
@@ -318,7 +350,24 @@ const groupedFormats = computed(() =>
         .filter(group => group.entries.length)
 );
 
+/** What the Personal Data tab offers while it is still empty. */
+const personalFormatGroups = computed(() =>
+    groupedFormats.value
+        .map(group => ({ ...group, entries: group.entries.filter(f => f.area === 'personal') }))
+        .filter(group => group.entries.length)
+);
 
+/**
+ * The supported-files dialog, split into the same two tabs as the page and
+ * grouped as each tab groups its files. It opens on whichever tab is showing.
+ */
+const dialogView = ref('personal');
+const dialogGroups = computed(() =>
+    dialogView.value === 'personal'
+        ? personalFormatGroups.value.map(g => ({ key: g.category, label: g.label, entries: g.entries }))
+        : groupPublicFormats(availableFormats.value).map(g => ({ key: g.label, label: g.label, entries: g.entries }))
+);
+const formatCount = (area) => availableFormats.value.filter(f => f.area === area).length;
 
 /**
  * Institution and the account's last four digits.
@@ -340,10 +389,6 @@ const holderOf = (entry) =>
 
 /** "<from> – <to>", or whichever end of it the statement has. */
 const periodOf = (entry) => {
-    // A reference document covers a single day rather than a period.
-    if (entry.response?.category === 'reference_rates') {
-        return entry.response?.data?.date ? formatDate(entry.response.data.date) : '';
-    }
     const txns = entry.response?.data?.transactions;
     const from = txns?.startDate ? formatDate(txns.startDate) : '';
     const to = txns?.endDate ? formatDate(txns.endDate) : '';
@@ -375,18 +420,11 @@ const describeError = (err) => {
         case 'incorrect_password':
             return 'That password did not open the file.';
         case 'unrecognized_format':
-            return `We read the file, but no parser recognised it as a supported statement${err.container ? ` (${err.container})` : ''}.`;
+            return `We read the file, but no parser recognised it as a supported statement or market data file${err.container ? ` (${err.container})` : ''}.`;
         default:
             return err.message;
     }
 };
-
-// A statement that prints no totals runs no summary checks, and must not look
-// as though it passed them.
-const summaryChecksRun = computed(() => {
-    const summary = validationReport.value?.summary_level;
-    return (summary?.declared?.checks?.length || 0) + (summary?.derived?.checks?.length || 0) > 0;
-});
 
 const validationMetrics = (report) => {
     if (!report || report.overall === 'passed') return null;
@@ -424,64 +462,6 @@ const formatUnits = (val) => {
 const formatNumber = (val) => {
     if (val === null || val === undefined) return '-';
     return Number(val).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
-};
-
-/** "forex_travel_card_buy" as the sheet wrote it: "Forex Travel Card Buy". */
-const columnLabel = (key) => key
-    .split('_')
-    .map(word => (word.length <= 2 ? word.toUpperCase() : word[0].toUpperCase() + word.slice(1)))
-    .join(' ');
-
-/**
- * A rate as the sheet quotes it, with the unit it is quoted in.
- *
- * Some currencies are priced per hundred, and showing 60.36 for the yen
- * without saying so is off by two orders of magnitude.
- */
-const rateUnit = (currency) => (currency.unit > 1 ? `per ${currency.unit}` : '');
-
-// Every timestamp the parsers emit is an instant in IST, dates included: a
-// date with no time is midnight IST. So this reads them all in Asia/Kolkata —
-// it used to read date-only fields in UTC, which only worked because those
-// were stamped at midnight UTC and the ones beside them at midnight IST.
-const formatDate = (ts) => {
-    if (ts === null || ts === undefined || ts === '') return '-';
-    const d = new Date(Number(ts) * 1000);
-    if (isNaN(d)) return ts;
-    return new Intl.DateTimeFormat(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        timeZone: 'Asia/Kolkata'
-    }).format(d);
-};
-
-const formatDateTime = (ts, path = null, dateOnlyPaths = []) => {
-    if (ts === null || ts === undefined || ts === '') return '-';
-    const d = new Date(Number(ts) * 1000);
-    if (isNaN(d)) return ts;
-
-    const forceDateOnly = path && dateOnlyPaths && dateOnlyPaths.includes(path);
-
-    if (!forceDateOnly) {
-        return new Intl.DateTimeFormat(undefined, { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit', 
-            minute: '2-digit', 
-            second: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Kolkata'
-        }).format(d);
-    } else {
-        return new Intl.DateTimeFormat(undefined, { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric',
-            timeZone: 'Asia/Kolkata'
-        }).format(d);
-    }
 };
 
 const hasRewards = (stmt) => {
@@ -635,7 +615,7 @@ const camsGroupedAssets = computed(() => {
         <CardHeader class="flex flex-row items-start justify-between space-y-0 pb-4">
           <div class="space-y-1.5">
             <CardTitle class="flex items-center gap-2">
-              <span>Import statements</span>
+              <span>Import files</span>
               <!-- The version of the parsers actually running, which is not
                    necessarily the version of the page that loaded them. -->
               <span
@@ -645,20 +625,40 @@ const camsGroupedAssets = computed(() => {
               >{{ parserVersion }}</span>
             </CardTitle>
             <CardDescription>
-              Drop a whole folder in at once. Each file is read in your browser and nothing is uploaded.
-              <Dialog>
+              Drop a whole folder in at once: statements, or price history from the publishers listed. Each file is read in your browser and nothing is uploaded.
+              <Dialog @update:open="(open) => { if (open) dialogView = view; }">
                 <DialogTrigger as-child>
                   <button class="underline underline-offset-4 hover:text-foreground">See supported formats</button>
                 </DialogTrigger>
                 <DialogContent class="sm:max-w-3xl">
                   <DialogHeader>
-                    <DialogTitle>Supported statements</DialogTitle>
+                    <DialogTitle>Supported files</DialogTitle>
                     <DialogDescription>
                       Where to download each one, and how to reach it. Read straight from this build, so the list cannot drift from what the parsers actually do.
                     </DialogDescription>
                   </DialogHeader>
+                  <!-- The page's two tabs, so a format is found where its files land. -->
+                  <div class="flex gap-1 border-b border-border" role="tablist">
+                    <button
+                      v-for="tab in [
+                        { id: 'personal', label: 'Personal Data' },
+                        { id: 'public', label: 'Market Data' },
+                      ]"
+                      :key="tab.id"
+                      role="tab"
+                      :aria-selected="dialogView === tab.id"
+                      class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors"
+                      :class="dialogView === tab.id
+                        ? 'border-primary text-foreground'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'"
+                      @click="dialogView = tab.id"
+                    >
+                      {{ tab.label }}
+                      <span class="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">{{ formatCount(tab.id) }}</span>
+                    </button>
+                  </div>
                   <div class="max-h-[60vh] space-y-5 overflow-y-auto py-2">
-                    <div v-for="group in groupedFormats" :key="group.category" class="space-y-2">
+                    <div v-for="group in dialogGroups" :key="group.key" class="space-y-2">
                       <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         {{ group.label }}
                       </p>
@@ -730,9 +730,9 @@ const camsGroupedAssets = computed(() => {
             @drop.prevent="onDrop"
           >
             <Upload class="h-7 w-7 text-muted-foreground" />
-            <span class="text-sm font-semibold">Drop statements here, or click to browse</span>
+            <span class="text-sm font-semibold">Drop files here, or click to browse</span>
             <span class="text-xs text-muted-foreground">
-              Bank, credit card, mutual fund and brokerage statements &mdash; Excel, CSV or PDF.
+              Bank, credit card, mutual fund and brokerage statements, and public price, NAV and index history &mdash; Excel, CSV or PDF.
             </span>
             <input type="file" multiple class="hidden" :accept="getAcceptString" @change="onPick" />
           </label>
@@ -796,38 +796,104 @@ const camsGroupedAssets = computed(() => {
         </CardContent>
       </Card>
 
-      <!-- One card per statement read, grouped by the kind of account. A row
-           that scrolls sideways hides whatever did not fit, and the whole
-           point of importing a folder at once is seeing the pile. -->
-      <div v-if="ready.length > 1" class="space-y-5">
+      <!-- The two areas. Counts say where a drop went without opening it. -->
+      <div v-if="wasmLoaded" class="flex gap-1 border-b border-border" role="tablist">
+        <button
+          v-for="tab in [
+            { id: 'personal', label: 'Personal Data', count: personalReady.length },
+            { id: 'public', label: 'Market Data', count: publicReady.length },
+          ]"
+          :key="tab.id"
+          role="tab"
+          :aria-selected="view === tab.id"
+          class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors"
+          :class="view === tab.id
+            ? 'border-primary text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'"
+          @click="view = tab.id"
+        >
+          {{ tab.label }}
+          <span v-if="tab.count" class="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">{{ tab.count }}</span>
+        </button>
+      </div>
+
+      <PublicData v-if="view === 'public'" :entries="publicReady" :formats="availableFormats" :focus-id="marketFocusId" @remove="remove" />
+
+      <template v-else>
+      <!-- Nothing read yet: say what belongs here, and where to get it, as
+           the Market Data tab does. -->
+      <Card v-if="wasmLoaded && !personalReady.length" class="bg-card border-border shadow-sm">
+        <CardHeader>
+          <CardTitle class="text-base">No personal data yet</CardTitle>
+          <CardDescription>
+            Drop statements from any of these institutions. Each is read in your browser; a password-protected one asks for its password above.
+          </CardDescription>
+        </CardHeader>
+        <!-- One column per kind of account, so the four read side by side. -->
+        <CardContent class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div v-for="group in personalFormatGroups" :key="group.category" class="space-y-2">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{{ group.label }}</p>
+            <div class="flex flex-col items-start gap-2">
+              <a
+                v-for="format in group.entries"
+                :key="format.id"
+                :href="format.download_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+              >
+                {{ format.institution }}
+                <ExternalLink class="h-3 w-3 text-muted-foreground" />
+              </a>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- One card per statement read, grouped by the kind of account -- even
+           for a single statement, so the view looks the same however many
+           were dropped. A row that scrolls sideways hides whatever did not
+           fit, and the whole point of importing a folder at once is seeing the
+           pile. The cross removes that one file. -->
+      <div v-if="personalReady.length" class="space-y-5">
         <div v-for="group in groupedReady" :key="group.category" class="space-y-2">
           <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             {{ group.label }} <span class="font-normal">({{ group.entries.length }})</span>
           </p>
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <button
-              v-for="entry in group.entries"
-              :key="entry.id"
-              class="flex flex-col gap-0.5 rounded-lg border p-3 text-left transition-colors"
-              :class="active?.id === entry.id
-                ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                : 'border-border hover:border-primary/40 hover:bg-muted/40'"
-              @click="activeId = entry.id"
-            >
-              <span class="truncate text-sm font-semibold leading-tight" :title="accountOf(entry)">
-                {{ accountOf(entry) }}
-              </span>
-              <span
-                v-if="holderOf(entry)"
-                class="truncate text-xs leading-tight text-muted-foreground"
-                :title="holderOf(entry)"
-              >{{ holderOf(entry) }}</span>
-              <span
-                v-if="periodOf(entry)"
-                class="truncate text-xs leading-tight tabular-nums text-muted-foreground"
-                :title="periodOf(entry)"
-              >{{ periodOf(entry) }}</span>
-            </button>
+            <!-- The card and its cross are sibling buttons: a button inside a
+                 button is not valid HTML. -->
+            <div v-for="entry in group.entries" :key="entry.id" class="relative">
+              <button
+                class="flex w-full flex-col gap-0.5 rounded-lg border p-3 pr-9 text-left transition-colors"
+                :class="active?.id === entry.id
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                  : 'border-border hover:border-primary/40 hover:bg-muted/40'"
+                @click="activeId = entry.id"
+              >
+                <span class="truncate text-sm font-semibold leading-tight" :title="accountOf(entry)">
+                  {{ accountOf(entry) }}
+                </span>
+                <span
+                  v-if="holderOf(entry)"
+                  class="truncate text-xs leading-tight text-muted-foreground"
+                  :title="holderOf(entry)"
+                >{{ holderOf(entry) }}</span>
+                <span
+                  v-if="periodOf(entry)"
+                  class="truncate text-xs leading-tight tabular-nums text-muted-foreground"
+                  :title="periodOf(entry)"
+                >{{ periodOf(entry) }}</span>
+              </button>
+              <button
+                class="absolute right-1.5 top-1.5 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                :aria-label="`Remove ${entry.name}`"
+                :title="`Remove ${entry.name}`"
+                @click="remove(entry)"
+              >
+                <X class="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -837,100 +903,14 @@ const camsGroupedAssets = computed(() => {
 
 
       <!-- Status Bar -->
-      <div v-if="fileInfo" class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-2">
-        <Card class="bg-card text-card-foreground shadow-sm border flex flex-col justify-center p-3 px-4">
-          <span class="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-0.5">File Name</span>
-          <span class="font-medium text-sm truncate" :title="fileInfo.name">{{ fileInfo.name }}</span>
-        </Card>
-        
-        <Card class="bg-card text-card-foreground shadow-sm border flex items-center justify-between p-3 px-4">
-          <div class="flex flex-col">
-            <span class="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-0.5">Size</span>
-            <span class="font-mono text-sm">{{ (fileInfo.size / 1024).toFixed(1) }} KB</span>
-          </div>
-          <div class="flex flex-col text-right">
-            <span class="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-0.5">Last Modified</span>
-            <span class="font-medium text-sm">{{ formatDateTime(fileInfo.modified_timestamp) }}</span>
-          </div>
-        </Card>
-        
-        <Card class="bg-card text-card-foreground shadow-sm border flex items-center justify-between p-3 px-4">
-          <div class="flex flex-col">
-            <span class="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-0.5">Validation Status</span>
-            
-            <div v-if="validationReport?.overall" class="flex items-center gap-3">
-              <!-- Summary Badge -->
-              <Tooltip>
-                <TooltipTrigger class="cursor-help flex items-center gap-1.5 font-semibold text-sm w-fit"
-                     :class="{
-                       'text-muted-foreground': !summaryChecksRun,
-                       'text-status-good-text': summaryChecksRun && validationReport.summary_level?.passed,
-                       'text-status-warning-text': summaryChecksRun && !validationReport.summary_level?.passed && validationReport.summary_level?.declared?.passed,
-                       'text-destructive': summaryChecksRun && !validationReport.summary_level?.declared?.passed
-                     }">
-                  <!-- Nothing to reconcile against is not a pass. -->
-                  <MinusCircle v-if="!summaryChecksRun" class="w-4 h-4 opacity-70" />
-                  <CheckCircle2 v-else-if="validationReport.summary_level?.passed" class="w-4 h-4" />
-                  <!-- Only derived checks failed: a warning, not a failure. -->
-                  <AlertTriangle v-else-if="validationReport.summary_level?.declared?.passed" class="w-4 h-4" />
-                  <XCircle v-else class="w-4 h-4" />
-                  <span>Summary</span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" class="p-3 max-w-sm">
-                  <div class="space-y-3 text-sm">
-                    <div v-if="validationReport.summary_level?.declared?.checks?.length > 0">
-                      <div class="font-semibold text-foreground mb-0.5">Declared Validations</div>
-                      <div class="text-muted-foreground">{{ validationReport.summary_level.declared.checks.filter(c => c.passed).length }} / {{ validationReport.summary_level.declared.checks.length }} checks passed</div>
-                    </div>
-                    <div v-if="validationReport.summary_level?.derived?.checks?.length > 0">
-                      <div class="font-semibold text-foreground mb-0.5">Derived Validations</div>
-                      <div class="text-muted-foreground">{{ validationReport.summary_level.derived.checks.filter(c => c.passed).length }} / {{ validationReport.summary_level.derived.checks.length }} checks passed</div>
-                    </div>
-                    <div v-if="!summaryChecksRun">
-                      <div class="font-semibold text-foreground mb-0.5">Statement Summary</div>
-                      <div class="text-muted-foreground">Totals not printed (nothing to reconcile)</div>
-                    </div>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
+      <FileStatus
+        v-if="fileInfo"
+        :file-info="fileInfo"
+        :validation="validationReport"
+        :parse-time="parseTime"
+        :no-balances-note="`Balances not printed (${totalTxns} txns extracted)`"
+      />
 
-              <!-- Transaction Badge -->
-              <Tooltip>
-                <TooltipTrigger class="cursor-help flex items-center gap-1.5 font-semibold text-sm w-fit"
-                     :class="{
-                       'text-muted-foreground': !validationReport.row_level?.checked_rows,
-                       'text-status-good-text': validationReport.row_level?.checked_rows > 0 && validationReport.row_level?.passed,
-                       'text-destructive': validationReport.row_level?.checked_rows > 0 && !validationReport.row_level?.passed
-                     }">
-                  <CheckCircle2 v-if="validationReport.row_level?.passed && validationReport.row_level?.checked_rows > 0" class="w-4 h-4" />
-                  <XCircle v-else-if="!validationReport.row_level?.passed" class="w-4 h-4" />
-                  <MinusCircle v-else class="w-4 h-4 opacity-70" />
-                  <span>Transactions</span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" class="p-3 max-w-sm">
-                  <div class="space-y-1 text-sm">
-                    <div class="font-semibold text-foreground mb-0.5">Running Transactions</div>
-                    <div class="text-muted-foreground" v-if="validationReport.row_level?.checked_rows > 0">
-                      {{ (validationReport.row_level?.checked_rows || 0) - (validationReport.row_level?.failed_rows?.length || 0) }} / {{ validationReport.row_level?.checked_rows || 0 }} txns passed
-                    </div>
-                    <div class="text-muted-foreground" v-else>
-                      Balances not printed ({{ totalTxns }} txns extracted)
-                    </div>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div v-else class="text-sm font-medium text-muted-foreground">-</div>
-          </div>
-          <div class="flex flex-col text-right">
-            <span class="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-0.5">Parse Time</span>
-            <span class="font-mono text-sm">{{ parseTime }}s</span>
-          </div>
-        </Card>
-      </div>
-
-      
       <!-- Credit Card Results Table -->
       <div v-if="ccStatement" class="space-y-6">
         
@@ -1482,69 +1462,6 @@ const camsGroupedAssets = computed(() => {
       </div>
       
       <!-- Equity Statement Results Table -->
-      <!-- A published rate card, which is not anybody's account: no holder, no
-           balance, no transactions. It still reads through the header the other
-           four share, with the sheet itself where a holder would be, so the
-           pile looks the same whatever was dropped into it.
-           No validation status is passed: a rate card has nothing to reconcile,
-           and a green tick would be claiming a check that never ran. -->
-      <div v-if="rateSheet" class="space-y-6">
-        <StatementHeader
-          customerName="Forex Card Rates"
-          statementType="Reference Rates"
-          :institutionName="result?.institution || ''"
-          :statementDetails="[
-            { label: 'Date', value: formatDate(rateSheet.date) },
-            ...(rateSheet.publishedAt ? [{ label: 'Published', value: formatDateTime(rateSheet.publishedAt) }] : []),
-            { label: 'Currencies', value: rateSheet.currencies?.length || 0 },
-            { label: 'Rate Columns', value: rateSheet.columns?.length || 0 }
-          ]"
-        />
-
-        <Card class="bg-card text-card-foreground shadow-sm">
-          <CardHeader class="pb-2 border-b mb-3">
-            <CardTitle class="text-sm text-muted-foreground font-semibold uppercase tracking-wider">
-              Rates ({{ getCurrencySymbol() }} per unit)
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead class="whitespace-nowrap">Currency</TableHead>
-                  <TableHead
-                    v-for="column in rateSheet.columns"
-                    :key="column"
-                    class="text-right whitespace-nowrap"
-                  >{{ columnLabel(column) }}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow v-for="currency in rateSheet.currencies" :key="currency.currency">
-                  <TableCell class="whitespace-nowrap">
-                    <span class="font-mono font-semibold">{{ currency.currency }}</span>
-                    <span class="ml-2 text-xs text-muted-foreground">{{ currency.name }}</span>
-                    <span
-                      v-if="rateUnit(currency)"
-                      class="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground"
-                      title="This currency is quoted for this many units, not for one."
-                    >{{ rateUnit(currency) }}</span>
-                  </TableCell>
-                  <!-- A column the sheet left unquoted is blank, not zero. A
-                       rate of zero is not a price anything traded at. -->
-                  <TableCell
-                    v-for="column in rateSheet.columns"
-                    :key="column"
-                    class="text-right font-mono tabular-nums"
-                    :class="currency.rates?.[column] === undefined ? 'text-muted-foreground' : ''"
-                  >{{ currency.rates?.[column] === undefined ? '—' : currency.rates[column] }}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
-
       <div v-if="equityStatement" class="space-y-6">
         
         <!-- Standardized Header -->
@@ -1729,6 +1646,7 @@ const camsGroupedAssets = computed(() => {
              </AccordionItem>
             </Accordion>
       </div>
+      </template>
       </main>
 
       <!-- Once a file has been read there is something to react to: how it

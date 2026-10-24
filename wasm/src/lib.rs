@@ -1,4 +1,5 @@
-//! The browser-facing interface: four functions, whatever the statement is.
+//! The browser-facing interface: four functions, whatever the statement is,
+//! and two for a parsed price series -- what it covers, and it as CSV.
 //!
 //! Callers used to pick one of ten exports by working out the category and
 //! institution themselves. They hand over bytes now, and `parse` says what the
@@ -9,7 +10,7 @@ use wasm_bindgen::prelude::*;
 
 use xfina::detect::Format;
 use xfina::error::XfinaError;
-use xfina::models::{ParseRequest, Schema};
+use xfina::models::{ParseRequest, PriceSeries, Schema};
 
 /// Everything optional a caller can attach to a file.
 ///
@@ -110,6 +111,33 @@ pub fn detect(bytes: &[u8], options: JsValue) -> Result<JsValue, JsValue> {
         Ok(detection) => to_js(&serde_json::json!(detection)),
         Err(e) => to_js(&error_envelope(&e, options.filename.as_deref())),
     }
+}
+
+/// A parsed price series as CSV, in Tiingo's column layout.
+///
+/// Takes the `data` of a market data parse -- the object `parse` returned, as
+/// it is -- so the file is not read twice. Every surface writes the same CSV
+/// because they all call the same function in the library.
+#[wasm_bindgen(js_name = seriesCsv)]
+pub fn series_csv(data: JsValue) -> Result<String, JsValue> {
+    let value: serde_json::Value = serde_wasm_bindgen::from_value(data)
+        .map_err(|e| JsValue::from_str(&format!("Invalid series: {}", e)))?;
+    PriceSeries::from_json(value)
+        .map(|series| series.to_csv())
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// What a parsed price series covers: first and last date, rows with a
+/// value, and gaps longer than its frequency explains.
+///
+/// Of the one file it was parsed from, never of several: putting pieces of a
+/// dataset together is not this library's job.
+#[wasm_bindgen(js_name = seriesCoverage)]
+pub fn series_coverage(data: JsValue) -> Result<JsValue, JsValue> {
+    let value: serde_json::Value = serde_wasm_bindgen::from_value(data)
+        .map_err(|e| JsValue::from_str(&format!("Invalid series: {}", e)))?;
+    let series = PriceSeries::from_json(value).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    to_js(&serde_json::json!(series.coverage()))
 }
 
 /// Every format this build knows, with whether it is compiled in.

@@ -1,6 +1,6 @@
 <script setup>
 import { Button, Card, CardContent, CardHeader, CardTitle, CardDescription } from 'xfina-ui';
-import { Download, FileJson, CheckCircle2, AlertTriangle, XCircle } from 'lucide-vue-next';
+import { Download } from 'lucide-vue-next';
 
 const props = defineProps({
   // Customer Card
@@ -37,8 +37,27 @@ const props = defineProps({
   validationStatus: {
     type: String,
     default: null
+  },
+  // Heading of the middle card.
+  detailsTitle: {
+    type: String,
+    default: 'Statement Details'
+  },
+
+  // Export Card. Off by default: statements do not export yet. A view that
+  // can export turns the buttons on and handles the events.
+  exportEnabled: {
+    type: Boolean,
+    default: false
+  },
+  // A rate sheet has no CSV form; a price series does.
+  csvAvailable: {
+    type: Boolean,
+    default: true
   }
 });
+
+const emit = defineEmits(['export-csv', 'export-json']);
 </script>
 
 <template>
@@ -69,7 +88,7 @@ const props = defineProps({
     <!-- Statement Card -->
     <Card class="bg-card text-card-foreground shadow-sm flex flex-col h-full">
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm text-muted-foreground font-semibold uppercase tracking-wider">Statement Details</CardTitle>
+        <CardTitle class="text-sm text-muted-foreground font-semibold uppercase tracking-wider">{{ detailsTitle }}</CardTitle>
       </CardHeader>
       <CardContent>
         <table class="w-full text-sm">
@@ -91,14 +110,30 @@ const props = defineProps({
       <CardHeader class="pb-2">
         <CardTitle class="text-sm text-muted-foreground font-semibold uppercase tracking-wider">Export Data</CardTitle>
       </CardHeader>
-      <CardContent class="flex flex-col gap-3 justify-center flex-1">
-        <Button variant="outline" class="w-full justify-start gap-2" disabled title="Export to CSV (Coming Soon)">
-          <Download class="h-4 w-4" />
-          Export CSV
+      <!-- Download buttons as every xfina.dev site draws them: the download
+           icon and the format, at one width. -->
+      <CardContent class="flex flex-wrap items-start gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          class="w-[5.5rem]"
+          :disabled="!exportEnabled || !csvAvailable"
+          :title="exportEnabled ? (csvAvailable ? 'Download as CSV, in Tiingo\'s column layout' : 'No CSV form for this document') : 'Export to CSV (Coming Soon)'"
+          aria-label="Download as CSV"
+          @click="emit('export-csv')"
+        >
+          <Download class="h-4 w-4 mr-1.5" />CSV
         </Button>
-        <Button variant="outline" class="w-full justify-start gap-2" disabled title="Export to JSON (Coming Soon)">
-          <FileJson class="h-4 w-4" />
-          Export JSON
+        <Button
+          variant="outline"
+          size="sm"
+          class="w-[5.5rem]"
+          :disabled="!exportEnabled"
+          :title="exportEnabled ? 'Download everything the file parsed to, as JSON' : 'Export to JSON (Coming Soon)'"
+          aria-label="Download as JSON"
+          @click="emit('export-json')"
+        >
+          <Download class="h-4 w-4 mr-1.5" />JSON
         </Button>
       </CardContent>
     </Card>
