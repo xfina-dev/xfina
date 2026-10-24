@@ -1,0 +1,27 @@
+{
+  "series": [
+    {
+      "minor": "0.10",
+      "latestPatch": "0.10.0",
+      "path": "/0.10/",
+      "commit": "c46b8d5abde97f85126feb35e5a634cba436a7f5"
+    },
+    {
+      "minor": "0.9",
+      "latestPatch": "0.9.0",
+      "path": "/0.9/",
+      "commit": "25617375c4e6ffe480641a130c6c5e9086484650"
+    },
+    {
+      "minor": "0.8",
+      "latestPatch": "0.8.1",
+      "path": "/0.8/",
+      "commit": "2915cd60af4d56aae13f352d4456e47e920c396d"
+    },
+    {
+      "minor": "unreleased",
+      "path": "/unreleased/",
+      "commit": "c46b8d5abde97f85126feb35e5a634cba436a7f5"
+    }
+  ]
+}

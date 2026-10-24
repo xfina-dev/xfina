@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="103 101 310 310">
+
+  <defs>
+    <linearGradient id="xGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#243B92"/>
+      <stop offset="100%" stop-color="#4457D9"/>
+    </linearGradient>
+
+    <linearGradient id="accent" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#3EDFD8"/>
+      <stop offset="100%" stop-color="#5BE5FF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- X -->
+  <path
+      fill="url(#xGrad)"
+      d="
+      M118 120
+      L190 120
+      L256 210
+      L322 120
+      L394 120
+      L292 255
+      L396 392
+      L326 392
+      L256 298
+      L186 392
+      L116 392
+      L220 255
+      Z"/>
+
+  <!-- Data Bars -->
+  <rect
+      x="318"
+      y="228"
+      width="22"
+      height="56"
+      rx="5"
+      fill="url(#accent)"/>
+
+  <rect
+      x="348"
+      y="198"
+      width="22"
+      height="86"
+      rx="5"
+      fill="url(#accent)"/>
+
+  <rect
+      x="378"
+      y="164"
+      width="22"
+      height="120"
+      rx="5"
+      fill="url(#accent)"/>
+
+</svg>

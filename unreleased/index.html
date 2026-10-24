@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>// Light or dark, once for every xfina.dev site: the OS decides until the reader
+// presses a toggle, and then their choice holds on xfina.dev, data.xfina.dev
+// and labs.xfina.dev alike.
+//
+// Load it in <head>, without defer or async, so the class is set before the
+// first paint and a dark-mode reader never sees a white flash. It is a classic
+// script, not a module, because a module is always deferred.
+//
+// The choice lives in a cookie on the parent domain, because localStorage is
+// per origin: stored there, a reader who chose dark on xfina.dev would get
+// light again on data.xfina.dev. Anywhere else, such as localhost during
+// development, it falls back to localStorage.
+
+(() => {
+  if (window.xfinaTheme) return;
+
+  const KEY = "xfina-theme";
+  const root = document.documentElement;
+  const os = window.matchMedia("(prefers-color-scheme: dark)");
+  const shared = /(^|\.)xfina\.dev$/.test(location.hostname);
+
+  function valid(value) {
+    return value === "light" || value === "dark" ? value : null;
+  }
+
+  function read() {
+    const cookie = document.cookie.match(/(?:^|;\s*)xfina-theme=(light|dark)(?:;|$)/);
+    if (cookie) return cookie[1];
+    // Storage can be missing or throw (private windows, blocked site data).
+    // The page then simply follows the OS.
+    try { return valid(localStorage.getItem(KEY)); } catch { return null; }
+  }
+
+  function write(value) {
+    if (shared) {
+      document.cookie = `${KEY}=${value}; Domain=xfina.dev; Path=/; Max-Age=31536000; SameSite=Lax; Secure`;
+      return;
+    }
+    try { localStorage.setItem(KEY, value); } catch { /* follows the OS */ }
+  }
+
+  let choice = read();
+
+  function isDark() {
+    return choice ? choice === "dark" : os.matches;
+  }
+
+  // `dark` is the class Tailwind's `darkMode: 'class'` reads. `light` marks an
+  // explicit light page, so the stylesheet's prefers-color-scheme fallback,
+  // which only exists for readers without JavaScript, stands down.
+  function apply() {
+    const dark = isDark();
+    root.classList.toggle("dark", dark);
+    root.classList.toggle("light", !dark);
+    window.dispatchEvent(new CustomEvent("themechange", { detail: { dark } }));
+  }
+
+  os.addEventListener("change", () => {
+    if (!choice) apply();
+  });
+
+  window.xfinaTheme = {
+    isDark,
+    toggle() {
+      choice = isDark() ? "light" : "dark";
+      write(choice);
+      apply();
+    },
+  };
+
+  apply();
+})();
+</script>
+
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xfina</title>
+    <script type="module" crossorigin src="./assets/index-D91jTw4v.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D2ZKUO3r.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
